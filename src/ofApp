@@ -1,0 +1,1789 @@
+#pragma once
+
+#include "ofMain.h"
+#include "ofxMidi.h"
+#include "ofxOsc.h"
+#include <ofBaseTypes.h>
+#include "utils.h"
+#include "feedback.h"
+#include "cinema.h"
+#include "uzi.h"
+#include "pointback.h"
+#include "scene.h"
+#include "distortion.h"
+#include "noise.h"
+#include "draw.h"
+#include "freezer.h"
+#include "shape.h"
+#include "AbstractApp.h"
+#include "ImgFolder.h"
+#include "imgloadingthread.h"
+#include "videoloadingthread.h"
+#include <sstream>
+#include <stdlib.h>
+#include <string>
+#include <iostream>
+#include <ofXml.h>
+#include <algorithm>
+#include <vector>
+
+using namespace std;
+
+class ofApp : public ofBaseApp,  public ofxMidiListener, public AbstractApp
+{
+public:
+    void setup(){
+        std::vector<int> ports;
+        ports.push_back(0);
+        ports.push_back(1);
+        ports.push_back(2);
+        ports.push_back(3);
+        ports.push_back(4);
+        ports.push_back(5);
+        ports.push_back(6);
+        for(int i=0;i<ports.size();i++){
+            midiIns.push_back(ofxMidiIn());
+            midiIns[i].openPort(ports[i]);
+            midiIns[i].addListener(this);
+        }
+        
+        receiver.setup(9000);
+        
+        ofSetFullscreen(fullscreen);
+        
+        pointback = new PointBack(this);
+        feedback = new Feedback(this);
+        noise = new Noise(this);
+        cinema = new Cinema(this);
+        uzi = new Uzi(this);
+        shape = new Shape(this);
+        drawscene = new Draw(this);
+        scene = feedback;
+        scene->setup();
+        
+        updateSkew(ofRandom(0.1), 0.05, false, 0.002, 0.8, 0.2);
+        
+        int bufferSize = 512;
+        ofSoundStreamSetup(2, 0, this, 44100, bufferSize, 4);
+        
+        ofEnableSmoothing();//doesnt seem to work
+        ofEnableAntiAliasing();
+        ofSetVerticalSync(true);
+        ofEnableAlphaBlending();
+        
+        if(HEIGHT==768){
+            kShader.load("./shaders/768/kalei");
+            chromaShader.load("shaders/768/chromaSep");
+            skewShader.load("shaders/768/skew");
+        }
+        if(HEIGHT==720){
+            kShader.load("shaders/720/kalei");
+            chromaShader.load("shaders/720/chromaSep");
+            squareShader.load("shaders/720/square");
+            skewShader.load("shaders/720/skew");
+        }
+        if(HEIGHT==1080){
+            kShader.load("shaders/1080/kalei");
+            chromaShader.load("shaders/1080/chromaSep");
+            squareShader.load("shaders/1080/square");
+            skewShader.load("shaders/1080/skew");
+        }
+        
+        displaceShader.load("shaders/displace");
+        hdrShader.load("shaders/gamma");
+        gBlurHor.load("shaders/gblurHD");
+        sInvert.load("shaders/invert");
+        alphaShader.load("shaders/alpha");
+        hueShader.load("shaders/hue");
+        pixelHShader.load("shaders/pixelsH");
+        threedeeShader.load("shaders/threeDee");
+        sobelShader.load("shaders/sobel");
+        gradientShader.load("shaders/gradient");
+        
+        iThreshShader.load("shaders/invertcolorthresholdsaturation");
+        threshShader.load("shaders/colorthresholdsaturation");
+        
+        fbo.allocate(WIDTH, HEIGHT);
+        fbo2.allocate(WIDTH, HEIGHT);
+        tempFbo.allocate(WIDTH, HEIGHT);
+        
+        for(int x=0;x<4;x++)
+            for(int y=0;y<4;y++){
+                dbImg[x][y] = 0;
+                dbVideo[x][y] = 0;
+                dbString[x][y] = 0;
+            }
+        
+        logfile.open("./log.txt",ofFile::WriteOnly);
+        
+        dixhuitmask.loadImage("jesuistheomask.png");
+        eqkomask.loadImage("eqkomask.png");
+        voutemask.loadImage("voutemask.png");
+        
+        ofSetFrameRate(30);
+        
+        if(INSTALLATION){
+            feedback->shapeNbPts = 3;
+            feedback->scale = 0.5;
+            feedback->dScale = 0.5;
+            kalei = 1;
+            kaleiNb = 2;
+        }
+    }
+    
+    void update(){
+        dbVideoMutex.lock();
+        scene->update();
+        chromasepAngle += 0.3*(chromasepAngleDelta-chromasepAngle); //angle update
+        chromaSep += 0.4*(chromaSepDelta - chromaSep);
+        tintBrightness += 0.5*(dTintBrightness - tintBrightness); //brightness easing
+        
+        /** AUDIO MAPPING **/
+        //<##>
+        currentRms *= audioGain;
+        fastrms += (currentRms - fastrms)*0.3;
+        slowrms += (currentRms - slowrms)*0.01;
+        float rmsThresh = 0.01;
+        //        cout << "crt rms " << currentRms << " eased rms " << rms  << " gain " << audioGain << " easing " << audioEasing << " filter " << audioFilter << endl;
+        //        chromaSepAudio = automode ? 0.25 : 0;
+        rotAudio = automode ? 1 : 0;
+        //                scaleAudio = automode ? 0.25 : 0;
+        if(automode){
+            if(ofRandom(1)<0.001){
+                kalei = 1;
+                kaleiNb = int(ofRandom(6));
+            }
+            if(ofRandom(1)<0.001){
+                feedback->shapeNbPts = 2 + int(ofRandom(4));
+            }
+            if(ofRandom(1)<0.001){
+                chromasepHue = int(ofRandom(255));
+                chromaSepDelta = int(ofRandom(127));
+            }
+        }
+        
+        displaceAmp *= 0.5;
+        
+        if(chromaSepAudio>0)
+            chromaSep = currentRms>rmsThresh?currentRms*chromaSepAudio:0;
+        if(chromaSepAudio>0)
+            chromaSep = fastrms>rmsThresh?fastrms*chromaSepAudio:0;
+        if(skewAudio>0)
+            skewAmp = fastrms>rmsThresh?fastrms*skewAudio:0;
+        if(skewVAudio>0)
+            skewVAmp = fastrms>rmsThresh?fastrms*skewVAudio:0;
+        if(displaceAudio>0)
+            displaceAmp = fastrms>rmsThresh?fastrms*displaceAudio:0;
+        if(displaceVAudio>0)
+            displaceVAmp = fastrms>rmsThresh?fastrms*displaceVAudio:0;
+        if(gammaAudio>0)
+            gamma =fastrms>rmsThresh?fastrms*gammaAudio:0;
+        if(fadeAudio>0)
+            tintBrightness = 1 - (fastrms>rmsThresh?fastrms*fadeAudio:0);
+        if(blurHAudio>0)
+            hblur = 1 - (fastrms>rmsThresh?fastrms*blurHAudio:0);
+        if(blurVAudio>0)
+            vblur = 1 - (fastrms>rmsThresh?fastrms*blurVAudio:0);
+        if(kaleiAudio>0){
+            kaleiNb = (int) (fastrms>rmsThresh?fastrms*kaleiAudio:0);
+            kalei = kaleiNb>0;
+        }
+        
+        if(rotAudio>0 && scene==feedback){
+            feedback->upRot = fastrms>rmsThresh?fastrms*rotAudio*10:0;
+        }
+        if(scaleAudio>0 && scene==feedback){
+            feedback->dScale = 1.5 + slowrms>rmsThresh?slowrms*scaleAudio*5:0;
+        }
+        
+        if(cinemaBackground || cinemaTexture)
+            cinema->update();
+        
+        if(randomTint)
+            setTintHue(ofRandom(1));
+        
+        /** OSC **/
+        while(receiver.hasWaitingMessages()){
+            ofxOscMessage m;
+            receiver.getNextMessage(&m);
+            
+            if(INSTALLATION && m.getAddress()== "/Audio/RMS2"){
+                skewAmp += 0.1;
+            }
+            
+            if(autoOnsets && m.getAddress() == "/Onset"){
+                //                kaleiNb = 1 + int(ofRandom(5));
+                //                kalei = 1;
+                //                feedback->doffx += 10;
+                cout << "onset" << endl;
+                if(ofRandom(1)<0.25)
+                    displaceAmp = 0.3;
+                if(ofRandom(1)<0.1)
+                    feedback->events.push_back("randomShape");
+            }
+            
+            /** MEDIA **/
+            if(strStartsWith(m.getAddress(), "/DB")){
+                
+                if(m.getAddress() == "/DBUP"){
+                    dbUp();
+                    continue;
+                }
+                
+                if(m.getAddress() == "/DBDOWN"){
+                    dbDown();
+                    continue;
+                }
+                
+                if(m.getAddress() == "/DBIMG"){
+                    int x = (int) m.getArgAsFloat(1);
+                    int y = (int) m.getArgAsFloat(2);
+                    if(x>=0 && x<4 && y>=0 && y<4){
+                        if(dbImg[x][y]!=0)
+                            delete dbImg[x][y];
+                        dbImg[x][y] = new ImgLoadingThread; //TODO NO DYNAMIC, STATIC IN CONSTRUCTOR
+                        dbImg[x][y]->startThread(false);
+                        dbImg[x][y]->path = m.getArgAsString(0);
+                        dbImg[x][y]->running = true;
+                        if(dbVideo[x][y]!=0)
+                            delete dbVideo[x][y];
+                        if(dbString[x][y]!=0)
+                            delete dbString[x][y];
+                        dbVideo[x][y] = 0;
+                        dbString[x][y] = 0;
+                    }
+                    continue;
+                }
+                
+                if(m.getAddress() == "/DBVID"){
+                    int x = (int) m.getArgAsFloat(1);
+                    int y = (int) m.getArgAsFloat(2);
+                    if(x>=0 && x<4 && y>=0 && y<4){
+                        dbVideoMutex.lock();
+                        if(dbVideo[x][y]!=0)
+                            delete dbVideo[x][y];
+                        dbVideo[x][y] = new VideoLoadingThread;
+                        //           dbVideo[x][y]->startThread(false);
+                        dbVideo[x][y]->path = m.getArgAsString(0);
+                        //dbVideo[x][y]->running = true;
+                        //dbVideo[x][y]->vid.loadMovie(m.getArgAsString(0));
+                        //dbVideo[x][y]->vid.play();
+                        dbVideo[x][y]->load();
+                        if(dbImg[x][y]!=0)
+                            delete dbImg[x][y];
+                        if(dbString[x][y]!=0)
+                            delete dbString[x][y];
+                        dbImg[x][y] = 0;
+                        dbString[x][y] = 0;
+                        dbVideoMutex.unlock();
+                    }
+                    continue;
+                }
+                
+                if(m.getAddress() == "/DBFOLDER"){
+                    int x = (int) m.getArgAsFloat(1);
+                    int y = (int) m.getArgAsFloat(2);
+                    if(x>=0 && x<4 && y>=0 && y<4){
+                        if(dbString[x][y]!=0)
+                            delete dbString[x][y];
+                        ImgFolder* f = new ImgFolder;
+                        f->loadFolder(m.getArgAsString(0));
+                        dbString[x][y] = f;
+                        if(dbVideo[x][y]!=0)
+                            delete dbVideo[x][y];
+                        if(dbImg[x][y]!=0)
+                            delete dbImg[x][y];
+                        dbImg[x][y] = 0;
+                        dbVideo[x][y] = 0;
+                    }
+                    continue;
+                }
+            }
+            
+            if(m.getAddress() == "/File"){
+                string path = m.getArgAsString(0);
+                scene->oscEvent(m.getAddress(), path);
+                continue;
+            }
+            
+            if(m.getAddress() == "/Gpad/L" || m.getAddress() == "/Gpad/R"){
+                vector<float> args;
+                args.push_back(m.getArgAsFloat(0));
+                args.push_back(m.getArgAsFloat(1));
+                scene->oscEvent(m.getAddress(), args);{
+                    if(m.getAddress() == "/Gpad/L")
+                        chromaSep = abs(args[0]);
+                }
+                if(m.getAddress() == "/Gpad/R")
+                    if(abs(args[0])>0.4 || abs(args[1])>0.4)
+                        chromasepAngle = atan2 (args[1], args[0])/(2*PI);
+                continue;
+            }
+            
+            /** KINECT **/
+            if(m.getAddress()=="/Kinect"){
+                kinectMesh.clear();
+                
+                int N = m.getNumArgs()/3;
+                //                for(int x=0;x<640;x++)
+                //                    for(int y=0;y<480;y++)
+                //                        kinectGrid[x][y] = -10000;
+                for(int i=0;i<N;i++){
+                    float x = 640-m.getArgAsFloat(i*3);
+                    float y = m.getArgAsFloat(i*3+1);
+                    float z = m.getArgAsFloat(i*3+2);
+                    ofVec3f v(x, y, z);
+                    kinectMesh.addVertex(v);
+                    int zMult = 400;
+                    //                    kinectMesh.addColor(ofColor::fromHsb(0, 0, 50+z*zMult, 50+z*zMult));
+                    //                    kinectMesh.addColor(ofColor::fromHsb(0, 0, 100+z*zMult));
+                    kinectMesh.addColor(ofColor::fromHsb(0, 0, ofRandom(255)));
+                }
+                
+                presence = N/3;
+                continue;
+            }
+            
+            /** LEAPMOTION **/
+            if(strStartsWith(m.getAddress(), "/Leap")){
+                if(strStartsWith(m.getAddress(), "/Leap") && scene == shape){
+                    float x = m.getArgAsFloat(0);
+                    float y = m.getArgAsFloat(1);
+                    float z = m.getArgAsFloat(2);
+                    vector<float> args;
+                    args.push_back((x-250)/150.0);
+                    args.push_back((y/250.0));
+                    args.push_back(((z-250)/150.0));
+                    scene->oscEvent(m.getAddress(), args);
+                    continue;
+                }else{
+                    if(m.getAddress()=="/Leap/HandL/Pos" ||
+                       m.getAddress()=="/Leap/HandR/Pos"){
+                        float x = m.getArgAsFloat(0);
+                        float y = m.getArgAsFloat(1);
+                        float z = m.getArgAsFloat(2);
+                        displaceAmp = (x-250)/500.0;
+                        skewAmp = (y-100)/1000.0;
+                        displaceProba = z/100.0;
+                        continue;
+                    }
+                    if(m.getAddress()=="/Leap/HandR/Closed"
+                       ||m.getAddress()=="/Leap/HandL/Closed"){
+                        displaceAmp = 0;
+                        skewAmp = 0;
+                    }
+                }
+            }
+            
+        }
+        dbVideoMutex.unlock();
+        
+        if(INSTALLATION){
+            ball = true;
+            //presence := fade in
+            dTintBrightness = ofMap(presence, 0, 20, 0, 1, true);
+            
+            feedback->shapeWeight = ofMap(presence, 0, 500, 1, 5, true);
+            
+            skewAmp *= 0.5;
+            cout << "skew amp " << skewAmp << endl;
+            
+            cout << presence << endl;
+            
+            chromaSepAudio = 1;
+        }
+    }
+    
+    void draw(){
+        if(kinectMasking){
+            /** KINECT MASK PROCESSING UNIT **/
+            ofPushMatrix();
+            ofBackground(255);
+            glPointSize(5);
+            kinectMesh.setMode(OF_PRIMITIVE_POINTS);
+            ofTranslate(WIDTH/2, HEIGHT/2, -HEIGHT/4);
+            ofScale(kinectScale, kinectScale, kinectScale);
+            ofSetColor(ofColor::black);
+            ofNoFill();
+            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            kinectMesh.draw();
+            glPointSize(1);
+            kinectMask.grabScreen(0, 0, WIDTH, HEIGHT);
+            ofPopMatrix();
+        }
+        
+        ofEnableAntiAliasing();
+        ofEnableSmoothing();
+        
+        cout << "FPS:" <<  ofGetFrameRate() << endl;
+        ofHideCursor();
+        
+        if(scene->isBackground()){
+            ofSetColor(0,0,0);
+            ofRect(0,0,WIDTH,HEIGHT);
+        }
+        
+        
+        if(bypass)
+            return;
+        
+        if(texture!=0)
+            texture->bind();
+        
+        ofSetColor(ofColor::white);
+        
+        for (int i=0; i<nBlocks; i++)
+            freezer.ablock();
+        
+        for (int i=0; i<nShifts; i++)
+            freezer.shift(scene->getImage());
+        
+        if (nShifts==0 && nBlocks ==0)
+            freezer.clear();
+        
+        fbo.begin(); //CPU
+        
+        if(scene->isBackground()){
+            ofSetColor(0,0,0); //background
+            ofRect(0,0,WIDTH,HEIGHT);
+            ofSetColor(ofColor::white);
+        }
+        
+        ofPushMatrix();
+        scene->draw();
+        ofPopMatrix();
+        
+        if (stripesAmp>0)
+            for (int i=0; i<stripesAmp*5; i++)
+                stripe(stripesSize);
+        
+        if (post_traitement){
+            ofPushMatrix();
+            scene->mask();
+            scene->capture();
+            ofPopMatrix();
+        }
+        
+        /** FX **/
+        
+        if(1==1){
+            
+            freezer.display();
+            
+            
+#ifdef CPU_SKEW
+            i.grabScreen(0,0,WIDTH,HEIGHT);
+            double s = ofGetElapsedTimeMicros();
+            if(skewAmp>0)
+                skew(&i, skewAmp, 10, false);
+            cout << (ofGetElapsedTimeMicros()-s) << endl;
+            i.draw(0,0);
+#endif
+            fbo.end();
+            
+            
+            ofFbo* curFbo = &fbo2; //GPU
+            ofFbo* srcFbo = &fbo;
+            
+#ifndef CPU_SKEW
+            if(skewAmp>0){
+                curFbo->begin();
+                skewShader.begin();
+                skewShader.setUniform1f("vertical", 0);
+                skewShader.setUniform1f("offset", ofGetFrameNum()*3);
+                skewShader.setUniform1f("intensity", skewAmp/10.0);
+                skewShader.setUniform1fv("skew", getSkewVector(), WIDTH);
+                srcFbo->draw(0,0);
+                skewShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            if(skewVAmp>0){
+                curFbo->begin();
+                skewShader.begin();
+                skewShader.setUniform1f("vertical", 1);
+                skewShader.setUniform1f("offset", ofGetFrameNum()*3);
+                skewShader.setUniform1f("intensity", skewVAmp/3.0);
+                skewShader.setUniform1fv("skew", getSkewVector(), WIDTH);
+                srcFbo->draw(0,0);
+                skewShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+#endif
+            
+            if(displaceAmp>0){
+                curFbo->begin();
+                updateDisplace(displaceProba);
+                displaceShader.begin();
+                displaceShader.setUniform1f("vertical", 0);
+                displaceShader.setUniform1f("intensity", displaceAmp*WIDTH/8);
+                displaceShader.setUniform1fv("displace", getDisplaceVector(), WIDTH);
+                srcFbo->draw(0,0);
+                displaceShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            if(displaceVAmp>0){
+                curFbo->begin();
+                updateDisplace(displaceProba);
+                displaceShader.begin();
+                displaceShader.setUniform1f("vertical", 1);
+                displaceShader.setUniform1f("intensity", displaceVAmp*WIDTH/8);
+                displaceShader.setUniform1fv("displace", getDisplaceVector(), WIDTH);
+                srcFbo->draw(0,0);
+                displaceShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            if(sobel){
+                curFbo->begin();
+                sobelShader.begin();
+                sobelShader.setUniform1i("fast", 1);
+                srcFbo->draw(0,0);
+                sobelShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            
+            /** GLOW **/
+            
+            if(glow && !ball){
+                tempFbo.begin();
+                srcFbo->draw(0,0);
+                tempFbo.end();
+                
+                curFbo->begin();
+                gBlurHor.begin();
+                gBlurHor.setUniform1f("vertical", 0);
+                gBlurHor.setUniform1f("resolution", glowResolution);
+                gBlurHor.setUniform1f("blurAmnt", glowAmnt);
+                gBlurHor.setUniform1f("originalMix", 0);
+                srcFbo->draw(0,0);
+                gBlurHor.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+                
+                curFbo->begin();
+                gBlurHor.begin();
+                gBlurHor.setUniform1f("vertical", 1);
+                gBlurHor.setUniform1f("resolution", glowResolution);
+                gBlurHor.setUniform1f("blurAmnt", glowAmnt);
+                gBlurHor.setUniform1f("originalMix", 0);
+                srcFbo->draw(0,0);
+                gBlurHor.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+                
+                ofEnableBlendMode(OF_BLENDMODE_ADD);
+                curFbo->begin();
+                srcFbo->draw(0,0);
+                tempFbo.draw(0,0); //glow rendering
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+                ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            }
+            
+            /** BLUR **/
+            
+            if(vblur!=0){
+                curFbo->begin();
+                gBlurHor.begin();
+                gBlurHor.setUniform1f("vertical", 0);
+                gBlurHor.setUniform1i("resolution", 5);
+                gBlurHor.setUniform1f("blurAmnt", vblur);
+                gBlurHor.setUniform1f("originalMix", blurOriginalMix);
+                srcFbo->draw(0,0);
+                gBlurHor.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            if(hblur!=0){
+                curFbo->begin();
+                gBlurHor.begin();
+                gBlurHor.setUniform1f("vertical", 1);
+                gBlurHor.setUniform1i("resolution", 5);
+                gBlurHor.setUniform1f("blurAmnt", hblur);
+                gBlurHor.setUniform1f("originalMix", blurOriginalMix);
+                srcFbo->draw(0,0);
+                gBlurHor.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            if(gamma!=1){
+                curFbo->begin();
+                hdrShader.begin();
+                hdrShader.setUniform1f("gamma", gamma);
+                srcFbo->draw(0,0);
+                hdrShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            if(spheric){
+                curFbo->begin();
+                squareShader.begin();
+                srcFbo->draw(0,0);
+                squareShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            
+            curFbo->begin();
+            srcFbo->draw(0,0);
+            curFbo->end();
+            curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+            srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            
+            if(invert){
+                curFbo->begin();
+                sInvert.begin();
+                srcFbo->draw(0,0);
+                sInvert.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            
+            if(randHHide>0){
+                curFbo->begin();
+                srcFbo->draw(0,0);
+                float x = ofRandom(WIDTH);
+                float w = ofRandom(WIDTH/8);
+                ofSetColor(ofColor::black);
+                ofRect(0, 0, x, HEIGHT);
+                ofRect(x+w, 0, WIDTH, HEIGHT);
+                ofSetColor(ofColor::white);
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            if(randVHide>0){
+                curFbo->begin();
+                srcFbo->draw(0,0);
+                float y = ofRandom(HEIGHT);
+                float h = ofRandom(HEIGHT/8);
+                ofSetColor(ofColor::black);
+                ofRect(0, 0, WIDTH, y);
+                ofRect(0, y+h, WIDTH, HEIGHT);
+                ofSetColor(ofColor::white);
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            if(chromaSep>0 || getTintSaturation()>0){
+                curFbo->begin();
+                chromaShader.begin();
+                chromaShader.setUniform1f("intensity", chromaSep);
+                float csHue = chromasepHue;
+                if(tintAmp<1){
+                    csHue = ofMap(chromasepHue/255-tintHue, 0, 1, tintCenter - tintAmp/2, tintCenter + tintAmp/2)*255;
+                }
+                chromaShader.setUniform1f("chromasepHue", csHue);
+                chromaShader.setUniform1f("chromaOffset", min(chromaOffset, tintAmp*255/2));
+                chromaShader.setUniform1f("chromasepAngle", chromasepAngle);
+                chromaShader.setUniform1f("hue", getTintHue());
+                chromaShader.setUniform1f("saturation", getTintSaturation()*200 /255.0);
+                srcFbo->draw(0,0);
+                chromaShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            if(kalei>0){
+                curFbo->begin();
+                kShader.begin();
+                kShader.setUniform1f("sides", (float) kaleiNb);
+                kShader.setUniform1f("offX", (float )kaleiOffX);
+                kShader.setUniform1f("offY", (float )kaleiOffY);
+                srcFbo->draw(0,0);
+                kShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+            }
+            
+            if(sortXThresh>0 || sortYThresh>0){
+                grayi.grabScreen(0,0,WIDTH,HEIGHT);
+                if(sortXThresh>0){
+                    curFbo->begin();
+                    pixelHShader.begin();
+                    pixelHShader.setUniformTexture("map", *getPixelsHImage(&grayi, sortXThresh, true), 1);
+                    pixelHShader.setUniform1f("vertical", 0);
+                    srcFbo->draw(0,0);
+                    pixelHShader.end();
+                    curFbo->end();
+                    curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                    srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+                }
+                if(sortYThresh>0){
+                    curFbo->begin();
+                    pixelHShader.begin();
+                    pixelHShader.setUniformTexture("map", *getPixelsVImage(&grayi, sortYThresh, true), 1);
+                    pixelHShader.setUniform1f("vertical", 1);
+                    srcFbo->draw(0,0);
+                    pixelHShader.end();
+                    curFbo->end();
+                    curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                    srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+                }
+            }
+            
+            if(gradient && getTintSaturation()>0){
+                gradientShader.begin();
+                cout << "hues:" << getTintHue() << ":" << chromaOffset  << " " << fmod(1+getTintHue() - min(chromaOffset/255, tintAmp/2), 1)
+                << ":" << fmod(1+getTintHue() + min(chromaOffset/255, tintAmp/2), 1) <<endl;
+                gradientShader.setUniform1f("hue", fmod(1+getTintHue() - min(chromaOffset/255, tintAmp/2),1));
+                gradientShader.setUniform1f("hue2", fmod(1+getTintHue() + min(chromaOffset/255, tintAmp/2),1));
+                gradientShader.setUniform1f("saturation", getTintSaturation());
+                ofSetColor(ofMap(tintBrightness, 0, 1, 0, 255));
+                srcFbo->draw(xOffset,0);
+                gradientShader.end();
+            }else{
+                ofSetColor(tintBrightness*255);
+                srcFbo->draw(xOffset,0);
+            }
+            
+            
+            i.grabScreen(0,0,WIDTH,HEIGHT);
+            if(WIDTH != FINALWIDTH || HEIGHT != FINALHEIGHT)
+                i.draw(0,0,FINALWIDTH,FINALHEIGHT);
+            
+            if(omg3D){
+                ofBackground(0);
+                alphaShader.begin();
+                ofPushMatrix();{
+                    //                    ofTranslate(FINALWIDTH/2, FINALHEIGHT/2);
+                    //                    float a = 60 ;
+                    //                    float l = 0.25;
+                    //                    ofPushMatrix();
+                    //                    ofTranslate(-FINALWIDTH*l, 0);
+                    //                    ofRotateY(a);
+                    //                    i.draw(-FINALWIDTH/2, -FINALHEIGHT/2, FINALWIDTH, FINALHEIGHT);
+                    //                    ofPopMatrix();
+                    //
+                    //                    ofPushMatrix();
+                    //                    ofTranslate(FINALWIDTH*l, 0);
+                    //                    ofRotateY(-a);
+                    //                    i.draw(-FINALWIDTH/2+FINALWIDTH, -FINALHEIGHT/2, -FINALWIDTH, FINALHEIGHT);
+                    //                    ofPopMatrix();
+                    //
+                    //                    ofPushMatrix();
+                    //                    ofTranslate(0, FINALHEIGHT*l);
+                    //                    ofRotateX(a);
+                    //                    i.draw(-FINALWIDTH/2, -FINALHEIGHT/2, FINALWIDTH, FINALHEIGHT);
+                    //                    ofPopMatrix();
+                    //
+                    //                    ofPushMatrix();
+                    //                    ofTranslate(0, -FINALHEIGHT*l);
+                    //                    ofRotateX(-a);
+                    //                    i.draw(-FINALWIDTH/2, -FINALHEIGHT/2 + FINALHEIGHT, FINALWIDTH, -FINALHEIGHT);
+                    //
+                    float nb = mouseX/100;
+                    ofPopMatrix();
+                    float a = mouseY/nb ;
+                                        float l = 0.3/nb;
+                                       ofTranslate(FINALWIDTH/2, FINALHEIGHT/2);
+                    for(int x=-nb;x<=nb;x++){
+                        for(int y=-nb;y<=nb;y++){
+                            ofPushMatrix();
+                            ofTranslate(FINALWIDTH*x*l, FINALHEIGHT*y*l);
+                            ofRotateX(a*y);
+                            ofRotateY(-a*x/2.0);
+                            i.draw(-FINALWIDTH/2, -FINALHEIGHT/2 , FINALWIDTH, FINALHEIGHT);
+                            ofPopMatrix();
+                        }
+                    }
+                }ofPopMatrix();
+                
+                alphaShader.end();
+            }
+            
+            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            if(omg3D2){
+                curFbo->begin();
+                ofBackground(0);
+                alphaShader.begin();
+                ofPushMatrix();{
+                    ofTranslate(FINALWIDTH/2, FINALHEIGHT/2);
+                    float a = 60 ;
+                    float l = 0.25;
+                    
+                    std::vector<int> zs;
+                    for(int x=0; x<=10;x++){
+                        ofPushMatrix();
+                        //                        int z =(((x*2*ofGetFrameNum())) % 500); //old good
+                        int z =(((ofGetFrameNum())*5 + x*1000/10) % 1000);
+                        zs.push_back(z);
+                    }
+                    std::sort(zs.begin(), zs.end());
+                    for (std::vector<int>::iterator it=zs.end(); it!=zs.begin(); --it){
+                        ofTranslate(0, 0, *it);
+                        ofRotateZ(-mouseX/10*(*it));
+                        i.draw(-FINALWIDTH/2, -FINALHEIGHT/2, FINALWIDTH, FINALHEIGHT);
+                        ofPopMatrix();
+                    }
+                }ofPopMatrix();
+                alphaShader.end();
+                curFbo->end();
+                curFbo = (curFbo==&fbo2) ? &fbo : &fbo2;
+                srcFbo = (srcFbo==&fbo2) ? &fbo : &fbo2;
+                
+                //                threshShader.begin();
+                threshShader.setUniform1f("threshold", 0.5);
+                threshShader.setUniform1f("brightness", 1);
+                threshShader.setUniform1f("saturation", 1);
+                srcFbo->draw(0,0);
+            }
+            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            
+            if(kinectMasking){
+                ofEnableBlendMode(OF_BLENDMODE_SUBTRACT);
+                kinectMask.draw(0,0);
+                ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            }
+            
+            ofEnableBlendMode(OF_BLENDMODE_MULTIPLY);
+            if(maskImg!=0)
+                maskImg->draw(0,0, FINALWIDTH, FINALHEIGHT); //offset fix
+            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+        }
+        
+        if (!post_traitement){
+            ofPushMatrix();
+            scene->mask();
+            scene->capture();
+            ofPopMatrix();
+        }
+        
+        if(1==0){
+            //            kinectMesh.clear();
+            //            int index2 = 0;
+            //            for(int i=0;i<10000;i++){
+            //                float x = ofRandom(100,-100)*3;
+            //                float y = ofRandom(100,-100)*2;
+            //                float z = ofRandom(1);
+            //                kinectMesh.addColor(ofColor::fromHsb(0, 0, ofRandom(255)));
+            //                kinectMesh.addVertex(ofVec3f(x, y, z));
+            //            }
+            
+            int numVerts = kinectMesh.getNumVertices();
+            kinectMesh2.clear();
+            //        while(kinectMesh2.getNumVertices()>5000)
+            //            kinectMesh2.removeVertex(0);
+            //        for(int i=0;i<kinectMesh2.getNumVertices();i++){
+            //            ofVec3f v = kinectMesh2.getVertex(i);
+            //            kinectMesh2.setVertex(i, ofVec3f(v.x, v.y+10, v.z+5));
+            //        }
+            //        int index2 = 0;
+            //        for(int ii=0;ii<numVerts;ii++){
+            //            float x = kinectMesh.getVertex(ii).x;
+            //            float y = kinectMesh.getVertex(ii).y;
+            //            float z = kinectMesh.getVertex(ii).z;
+            //            int m = 0;
+            //            for(int i=0;i<1;i++){
+            //                float zz = z + ofRandom(-m,m);
+            //                kinectMesh2.addVertex(ofVec3f(x + ofRandom(-m,m), y + ofRandom(-m,m), zz));
+            //                kinectMesh2.addColor(ofColor::fromHsb(0, 0, 100+zz*150));
+            //                index2++;
+            //            }
+            //        }
+            
+            kinectMesh.clearIndices();
+            float mc = 15;
+            float Mc = mc + 5;
+            kinectMesh.clearColors();
+            //            for( int i=0; i < kinectMesh.getVertices().size(); i++ ) kinectMesh.addNormal(ofPoint(0,0,0));
+            for (int a=0; a<numVerts-1; ++a) {
+                ofVec3f verta = kinectMesh.getVertex(a);
+                //                            ofColor col =i.getColor(int(verta.x+320), int(verta.y));
+                //                            col.setBrightness(25);
+                ofColor col = ofColor::fromHsb(0, 0, ofRandom(255));
+                kinectMesh.addColor(col);
+                for (int b=a+1; b<numVerts; ++b) {
+                    ofVec3f vertb = kinectMesh.getVertex(b);
+                    float distance = verta.distance(vertb);
+                    if (distance >= mc && distance <= Mc && ofRandom(0.1)<1){
+                        //                    && verta.y -25 < ofGetMouseY() && verta.y +25 > ofGetMouseY()) {
+                        kinectMesh.addIndex(a);
+                        kinectMesh.addIndex(a+1);
+                        kinectMesh.addIndex(b);
+                        
+                        const int ia = a;
+                        const int ib = a+1;
+                        const int ic = b;
+                        
+                        //                        ofVec3f e1 = kinectMesh.getVertices()[ia] - kinectMesh.getVertices()[ib];
+                        //                        ofVec3f e2 = kinectMesh.getVertices()[ic] - kinectMesh.getVertices()[ib];
+                        //                        ofVec3f no = e2.cross( e1 );
+                        //                        kinectMesh.getNormals()[ia] += no;
+                        //                        kinectMesh.getNormals()[ib] += no;
+                        //                        kinectMesh.getNormals()[ic] += no;
+                    }
+                }
+            }
+            
+            //            ofBackground(0);
+            ofSetColor(ofColor::white);
+            //            ofNoFill();
+            //<##>
+            ofPushMatrix();
+            ofTranslate(-WIDTH/2, HEIGHT/2, -HEIGHT/4); //,new scale
+            ofScale(WIDTH/640.0, HEIGHT/480.0, 1);
+            ofEnableBlendMode(OF_BLENDMODE_SCREEN);
+            kinectMesh.setMode(OF_PRIMITIVE_TRIANGLES);
+            
+            //            ofDisableArbTex();
+            //            ofEnableNormalizedTexCoords();
+            //            glEnable(GL_DEPTH_TEST);
+            //            i.getTextureReference().bind();
+            kinectMesh.draw();
+            //            i.getTextureReference().unbind();
+            //            glDisable(GL_DEPTH_TEST);
+            //            ofDisableNormalizedTexCoords();
+            //            ofEnableArbTex();
+            
+            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            ofPopMatrix();
+            
+            i.grabScreen(0, 0, WIDTH, HEIGHT);
+            
+            /** GLOW **/
+            if(glow){
+                tempFbo.begin();
+                threshShader.begin();
+                threshShader.setUniform1f("threshold", 0.5);
+                threshShader.setUniform1f("brightness", 1);
+                threshShader.setUniform1f("saturation", 1);
+                ofBackground(0);
+                i.draw(0, 0);
+                threshShader.end();
+                tempFbo.end();
+                
+                fbo.begin();
+                gBlurHor.begin();
+                gBlurHor.setUniform1f("vertical", 0);
+                gBlurHor.setUniform1f("resolution", glowResolution);
+                gBlurHor.setUniform1f("blurAmnt", glowAmnt);
+                gBlurHor.setUniform1f("originalMix", 0);
+                tempFbo.draw(0,0);
+                gBlurHor.end();
+                fbo.end();
+                
+                fbo2.begin();
+                gBlurHor.begin();
+                gBlurHor.setUniform1f("vertical", 1);
+                gBlurHor.setUniform1f("resolution", glowResolution);
+                gBlurHor.setUniform1f("blurAmnt", glowAmnt);
+                gBlurHor.setUniform1f("originalMix", 0);
+                fbo.draw(0,0);
+                gBlurHor.end();
+                fbo2.end();
+                
+                ofEnableBlendMode(OF_BLENDMODE_ADD);
+                fbo2.draw(0,0);
+                tempFbo.draw(0,0); //glow rendering
+                ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            }else{
+                threshShader.begin();
+                threshShader.setUniform1f("threshold", 0.5);
+                threshShader.setUniform1f("brightness", 1);
+                threshShader.setUniform1f("saturation", 1);
+                ofBackground(0);
+                i.draw(0, 0);
+                threshShader.end();
+            }
+        }
+        
+        if(ball){
+            ofBackground(0);
+            ofSetColor(ofColor::white);
+            ofNoFill();
+            ofPushMatrix();
+            ofScale(kinectScale, kinectScale, kinectScale);
+            
+            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            
+            kinectMesh.setMode(OF_PRIMITIVE_TRIANGLES);
+            ofDisableArbTex();
+            ofEnableNormalizedTexCoords();
+            glEnable(GL_DEPTH_TEST);
+            
+            i.getTextureReference().bind();
+            ofTranslate(WIDTH/2, HEIGHT/2, 0);
+            ofRotateY(180);
+            
+            kinectMesh = ofMesh::sphere(320);
+            kinectMesh.draw();
+            
+            i.getTextureReference().unbind();
+            glDisable(GL_DEPTH_TEST);
+            ofDisableNormalizedTexCoords();
+            ofEnableArbTex();
+            
+            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            
+            ofPopMatrix();
+            
+            i.grabScreen(0, 0, WIDTH, HEIGHT);
+            
+            
+            /** GLOW **/
+            
+            if(glow){
+                tempFbo.begin();
+                threshShader.begin();
+                threshShader.setUniform1f("threshold", 0.5);
+                threshShader.setUniform1f("brightness", 1);
+                threshShader.setUniform1f("saturation", 1);
+                ofBackground(0);
+                i.draw(0, 0);
+                threshShader.end();
+                tempFbo.end();
+                
+                fbo.begin();
+                gBlurHor.begin();
+                gBlurHor.setUniform1f("vertical", 0);
+                gBlurHor.setUniform1f("resolution", glowResolution);
+                gBlurHor.setUniform1f("blurAmnt", glowAmnt);
+                gBlurHor.setUniform1f("originalMix", 0);
+                tempFbo.draw(0,0);
+                gBlurHor.end();
+                fbo.end();
+                
+                fbo2.begin();
+                gBlurHor.begin();
+                gBlurHor.setUniform1f("vertical", 1);
+                gBlurHor.setUniform1f("resolution", glowResolution);
+                gBlurHor.setUniform1f("blurAmnt", glowAmnt);
+                gBlurHor.setUniform1f("originalMix", 0);
+                fbo.draw(0,0);
+                gBlurHor.end();
+                fbo2.end();
+                
+                ofEnableBlendMode(OF_BLENDMODE_ADD);
+                fbo2.draw(0,0);
+                tempFbo.draw(0,0); //glow rendering
+                ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            }else{
+                threshShader.begin();
+                threshShader.setUniform1f("threshold", 0.5);
+                threshShader.setUniform1f("brightness", 1);
+                threshShader.setUniform1f("saturation", 1);
+                ofBackground(0);
+                i.draw(0, 0);
+                threshShader.end();
+            }
+        }
+        
+        
+        if(saveMacros){
+            ofSetColor(ofColor::red);
+            ofRect(0,0,1000,25);
+            ofSetColor(ofColor::white);
+        }
+        
+        if(texture!=0)
+            texture->unbind();
+    }
+    
+    void keyPressed(int key){
+        logfile << ofGetElapsedTimeMillis() << " KeyPressed " << key << endl;
+        
+        ofBackground(0);
+        switch(key){
+                /* case '"':{
+                 stringstream str;
+                 str << "./m" << ((int)ofRandom(0,100)) <<".xml";
+                 loadMacro(str.str());
+                 }
+                 break;*/
+            case 'm':
+                resetMidi();
+                break;
+            case 'f':
+                fullscreen = !fullscreen;
+                ofSetFullscreen(fullscreen);
+                break;
+            case 'o':
+                scene = feedback;
+                feedback->nestedScene = 0;
+                break;
+            case 'i':
+                scene = feedback;
+                feedback->nestedScene = cinema;
+                break;
+            case 'c':
+                scene = cinema;
+                break;
+            case 'u':
+                scene = uzi;
+                break;
+            case 'p':
+                scene = pointback;
+                pointback->nestedScene = 0;
+                break;
+            case 'y':
+                scene = pointback;
+                pointback->nestedScene = cinema;
+                break;
+            case 't':
+                scene = shape;
+                break;
+            case '<':
+                post_traitement = !post_traitement;
+                break;
+            case 'a':
+                audio = !audio;
+                break;
+            case 'k':
+                kalei = kalei==-1 ? (int) ofRandom(32) : -1;
+                kaleiNb = 0;
+                break;
+            case 'e':
+                skewAmp = skewAmp>0 ? 0 : ofRandom(0.3);
+                break;
+            case 'q':
+                xOffset-=10;
+                break;
+            case 'd':
+                xOffset+=10;
+                break;
+            case 's':
+                if(!safeMode)
+                    saveMacros = !saveMacros;
+                break;
+            case '+':
+                kinectScale+=0.5;
+                break;
+            case '@':
+                automode = !automode;
+                break;
+            case '&':
+                autoOnsets = !autoOnsets;
+                break;
+            case 'x':
+                feedback->dScale += 0.1;
+                break;
+            case 'w':
+                feedback->dScale -= 0.1;
+                break;
+            case '\'':
+                //                feedback->upRot += 0.1;
+                feedback->upRot += 0.1;
+                break;
+            case '\"':
+                //                feedback->upRot -= 0.1;
+                feedback->upRot -= 0.1;
+                break;
+            case '(':
+                displaceAmp = displaceAmp>0?0:2;
+                break;
+            case '!':
+                skewAmp = skewAmp>0?0:0.5;
+                break;
+            case ')':
+                chromaSepDelta += 0.5;
+                break;
+            case '-':
+                nShifts = nShifts>0?0:5;
+                break;
+                
+        }
+        
+        scene->keyPressed(key);
+    }
+    
+    void keyReleased(int key){}
+    void mouseMoved(int x, int y){}
+    void mouseDragged(int x, int y, int button){
+        scene->mouseDragged(x,y,button);
+        // setTintHue(0.3);
+        // tintSaturation = (0.8);
+    }
+    void mousePressed(int x, int y, int button){}
+    void mouseReleased(int x, int y, int button){}
+    void windowResized(int w, int h){}
+    void dragEvent(ofDragInfo dragInfo){}
+    
+    void newMidiMessage(ofxMidiMessage& eventArgs){
+        dbVideoMutex.lock();
+        if(eventArgs.channel == 3)
+            scene->midiEvent(eventArgs);
+        
+        float value = eventArgs.value;
+        switch(eventArgs.status){
+            case MIDI_CONTROL_CHANGE:{
+                logfile << ofGetElapsedTimeMillis() << " MIDI CC " << eventArgs.control << " " << value << endl;
+                cout << " MIDI CTRL " << eventArgs.control  << " ch: " << eventArgs.channel << " : " << value<< endl;
+                switch(eventArgs.channel){
+                    case 2:{
+                        switch(eventArgs.control){
+                            case 1:
+                                modWheel = value;
+                                break;
+                                
+                            case 0 :{
+                                skewVAmp = 0;
+                                skewAmp = 0;
+                                displaceVAmp = 0;
+                                displaceAmp = 0;
+                                if(value < 68 && value >60)
+                                    break;
+                                if(modWheel<125){
+                                    if (value<60){
+                                        if (value>32)
+                                            skewVAmp = 0.2*((64-value)*2-1)/127;
+                                        else
+                                            skewVAmp = 3*((64-value)*2-1)/127;
+                                    }
+                                    if (value>68){
+                                        if (value<98)
+                                            skewAmp = 0.2*((value-64)*2-1)/127;
+                                        else
+                                            skewAmp = 3*((value-64)*2-1)/127;
+                                    }
+                                }
+                                if(modWheel>3){
+                                    if (value<60)
+                                        displaceVAmp = ((64-value)*2-1)/127;
+                                    else
+                                        displaceAmp = ((value-64)*2-1)/127;
+                                    break;
+                                }
+                            }
+                                break;
+                                
+                            case 24:
+                                stripesAmp = (value-1)/127;
+                                break;
+                            case 27:
+                                if(!audioReaktivMap)
+                                    hblur = value;
+                                else
+                                    blurHAudio = value;
+                                break;
+                            case 28:
+                                if(!audioReaktivMap)
+                                    vblur = value;
+                                else
+                                    blurVAudio = value;
+                                break;
+                                //case 34:
+                                //  stripesSize = (value-1)/127;
+                                //break;
+                                
+                            case 25:{
+                                sortXThresh = value>10?255*value/127:0;
+                                sortXThresh /= 1000;
+                            }
+                                break;
+                            case 26:{
+                                sortYThresh = value>10?255*value/127:0;
+                                sortYThresh /= 1000;
+                            }
+                                break;
+                                
+                            case 37:{
+                                distTest = (int) (value-64) / 2;
+                            }break;
+                                
+                            case 41:
+                                setTintHue((value-5)/127.0);
+                                tintSaturation = 1;
+                                break;
+                                
+                            case 42:
+                                if(!audioReaktivMap){
+                                    if (value<64)
+                                        skewVAmp = 0.2*(value-1)/127;
+                                    else
+                                        skewVAmp = 3*(value-1)/127;
+                                }
+                                else{
+                                    if (value<64)
+                                        skewVAudio = 0.2*(value-1)/127;
+                                    else
+                                        skewVAudio = 3*(value-1)/127;
+                                }
+                                break;
+                                
+                            case 43:
+                                if(!audioReaktivMap){
+                                    if (value<64)
+                                        skewAmp = 0.2*(value-1)/127;
+                                    else
+                                        skewAmp = 3*(value-1)/127;
+                                }else{
+                                    if (value<64)
+                                        skewAudio = 0.2*(value-1)/127;
+                                    else
+                                        skewAudio = 3*(value-1)/127;
+                                }
+                                break;
+                                
+                            case 44:
+                                if(!audioReaktivMap)
+                                    displaceVAmp = (value-1)/127;
+                                else
+                                    displaceVAudio = (value-1)/127;
+                                break;
+                            case 45:
+                                if(!audioReaktivMap)
+                                    displaceAmp = (value-1)/127;
+                                else
+                                    displaceAudio = (value-1)/127;
+                                break;
+                            case 46:
+                                displaceProba = 0.001+value/512;
+                                break;
+                                
+                            case 47:
+                                nShifts = int(3*value/127);
+                                break;
+                                
+                            case 48:
+                                dTintBrightness = value/127.0;
+                                break;
+                                
+                            case 51:
+                                chromaSens = (value==0);
+                                break;
+                            case 21:
+                                chromasepAngleDelta = (value-1)/127;
+                                break;
+                                
+                            case 22:
+                                chromasepHue = value*2;
+                                break;
+                                
+                            case 31:
+                                chromasepAngle = value>63 ? 0 : 0.25;
+                                chromasepAngleDelta = chromasepAngle;
+                                break;
+                                
+                            case 32:
+                                chromaOffset = value;
+                                break;
+                                
+                            case 33:
+                                audioGain = value/127*10;
+                                break;
+                            case 34: audioEasing = value/127;
+                                break;
+                            case 35 : audioFilter = 40 + value/127 *5000;
+                                break;
+                                
+                                
+                            case 38:
+                                if(!audioReaktivMap){
+                                    gamma = 0.01 + 10*value/127;
+                                }else
+                                    gammaAudio = 0.1 + 10*value/127;
+                                break;
+                                
+                            case 81:
+                                tintSaturation = (tintSaturation>0)?0:1; //full tint
+                                break;
+                                
+                            case 82:randomTint  = !randomTint;
+                                break;
+                                
+                            case 84:
+                                randVHide = randVHide>0?0:1;
+                                break;
+                            case 85:
+                                randHHide = randHHide>0?0:1;
+                                break;
+                                
+                            case 87:
+                                freezer.centered = value==127;
+                                break;
+                                
+                            case 88:
+                                updateSkew(ofRandom(0.2), ofRandom(0.15), false,
+                                           ofRandom(0.05), ofRandom(0.1), ofRandom(0.5));
+                                break;
+                                
+                            case 64:
+                                tintSaturation = (tintSaturation==1)?0:1;
+                                break;
+                                
+                            case 78:{
+                                gamma = 1;
+                                gammaAudio = 0;
+                            }
+                                break;
+                                
+                                
+                            case 93:{ //audio reset
+                                audioReaktivMap = 0;
+                                chromaSepAudio=skewAudio=skewVAudio=displaceAudio=displaceVAudio=kaleiAudio=blurHAudio=blurVAudio=gammaAudio=fadeAudio=0;
+                            }
+                            case 96:
+                                audioReaktivMap = value==0;
+                                break;
+                                
+                            case 91:
+                                loadColorWithMacro = false;
+                                break;
+                            case 92:
+                                loadColorWithMacro = true;
+                                break;
+                                
+                            case 119:
+                                bypass = !bypass;
+                                break;
+                        }
+                    }
+                        break;
+                    case 3:{
+                        switch(eventArgs.control){
+                            case 9:
+                                if(!audioReaktivMap)
+                                    chromaSepDelta = (value*value-1)/(127*50.);
+                                else
+                                    chromaSepAudio = (value*value-1)/(127*50.);
+                                break;
+                            case 30:
+                                spheric = !spheric;
+                                break;
+                                
+                            case 115:
+                                sobel = !sobel;
+                                break;
+                            case 116:
+                                glow = !glow;
+                                break;
+                            case 118:
+                                omg3D2 = !omg3D2;
+                                break;
+                            case 117:{
+                                ball = !ball;
+                            }
+                                break;
+                            case 119:
+                                omg3D = !omg3D;
+                                break;
+                        }
+                    }
+                }
+            }
+            case MIDI_NOTE_ON:{
+                cout << "status" << eventArgs.status  << " " << eventArgs.value << endl;
+                if(eventArgs.pitch!=0)
+                    cout << " MIDI NOTE " << eventArgs.pitch << "chan" << eventArgs.channel << endl;
+                logfile << ofGetElapsedTimeMillis() <<" MIDI NOTEON " << eventArgs.pitch << " " << value << endl;
+                int pitch = eventArgs.pitch;
+                switch(eventArgs.channel){
+                    case 1 :{
+                        if((pitch>=0 && pitch<=7) || (pitch>=16 && pitch<=23)
+                           || (pitch>=32 && pitch<=39) || (pitch>=48 && pitch<=55)
+                           || (pitch>=64 && pitch<=71) || (pitch>=80 && pitch<=87)
+                           || (pitch>=96 && pitch<=103) || (pitch>=112 && pitch<=119)){
+                            stringstream path;
+                            path << "./m" << pitch << ".xml";
+                            cout << path.str() << endl;
+                            if(eventArgs.velocity>0){ // A FAIRE POUR LE RESTE
+                                if(saveMacros){
+                                    saveMacro(path.str());
+                                    saveMacros = false;
+                                }else{
+                                    loadMacro(path.str());
+                                }
+                            }
+                        }
+                        break;
+                    }
+                    case 2:{
+                        
+                        switch(pitch){
+                                
+                            case 36:
+                                maskImg = maskImg==&dixhuitmask?0:&dixhuitmask;
+                                break;
+                            case 37:
+                                //maskImg = maskImg==&vdmask?0:&vdmask;
+                                break;
+                            case 38:
+                                //maskImg = maskImg==&eqkomask?0:&eqkomask;
+                                break;
+                            case 41 :
+                                randHHide = randHHide==0?1:0;
+                                break;
+                            case 42 :
+                                randVHide = randVHide==0?1:0;
+                                break;
+                                
+                            case 48:
+                                setTintHue(0.0);
+                                break;
+                            case 49:
+                                setTintHue(1/12.0);
+                                break;
+                            case 50:
+                                setTintHue(2/12.0);
+                                break;
+                            case 51:
+                                setTintHue(3/12.0);
+                                break;
+                            case 52:
+                                setTintHue(4/12.0);
+                                break;
+                            case 53:
+                                setTintHue(5/12.0);
+                                break;
+                            case 54:
+                                setTintHue(6/12.0);
+                                break;
+                            case 55:
+                                setTintHue(7/12.0);
+                                break;
+                            case 56:
+                                setTintHue(8/12.0);
+                                break;
+                            case 57:
+                                setTintHue(9/12.0);
+                                break;
+                            case 58:
+                                setTintHue(10/12.0);
+                                break;
+                            case 59:
+                                setTintHue(11/12.0);
+                                break;
+                                
+                            case 60:{
+                                kalei = kalei>0?0:1;
+                                if(kalei == 0)
+                                    kaleiAudio = 0;
+                            }
+                                break;
+                            default:
+                                if(pitch>=61 && pitch <=72){
+                                    if(!audioReaktivMap){
+                                        kaleiNb = pitch-61;
+                                        kalei = 1;
+                                    }else{
+                                        kaleiAudio = pitch-61;
+                                    }
+                                    break;
+                                }
+                        }
+                    }break;
+                    case 3:{ // MPD 32
+                        switch(pitch){
+                            case 68 : setTintMode(0);
+                                break;
+                            case 69 : setTintMode(-1);
+                                break;
+                            case 70 : setTintMode(1);
+                                break;
+                            case 71 : setTintMode(2);
+                                break;
+                            default:;
+                        }break;
+                    }
+                }
+            }
+            case MIDI_NOTE_OFF:{
+                logfile << ofGetElapsedTimeMillis() << " MIDI NOTEOFF " << eventArgs.pitch << " " << value << endl;
+            }
+            default:;
+        }
+        dbVideoMutex.unlock();
+    }
+    
+    void saveMacro(string path);
+    void loadMacro(string path);
+    
+    void audioRequested(float * output, int bufferSize, int nChannels);
+    void audioReceived(float *input, int bufferSize, int nChannels);
+    
+    void exit(){
+        logfile.close();
+    }
+    
+    void dbUp();
+    void dbDown();
+    ofImage* getDbImage(int x, int y);
+    ofVideoPlayer* getDbVideo(int x, int y);
+    ImgFolder* getDbFolder(int x, int y);
+    
+    
+    void resetMidi();
+    
+    Scene* scene;
+    
+    /** FX **/
+    float  stripesAmp=0., stripesSize=0.1;
+    float skewAmp=0.0, skewVAmp=0.0, skewSpeed=0.2;
+    bool skewBorderCopy=false;
+    float displaceAmp = 0., displaceVAmp=0., displaceProba = 0.1;
+    float chromaOffset = 200, chromasepAngle=0, chromasepAngleDelta=0, chromasepHue=100,chromaSep=0., chromaSepDelta = 0.;
+    bool chromaSens = true;
+    float sortXThresh = 0, sortYThresh = 0;
+    
+    bool post_traitement = true;
+    
+    /** Audio **/
+    bool audio = false;
+    int soundBufferOffset = 0;
+    ofImage i, grayi;
+    float slowrms=0;
+    float fastrms=0;
+    
+    std::vector<ofxMidiIn> midiIns;
+    ofxMidiMessage midiMessage;
+    
+    /** Scenes **/
+    PointBack* pointback;
+    Feedback* feedback;
+    Cinema* cinema;
+    Uzi* uzi;
+    Noise* noise;
+    Shape* shape;
+    Draw* drawscene;
+    
+    bool bypass = false;
+    
+    /** FREEZER */
+    Freezer freezer;
+    int nBlocks = 0;
+    int nShifts = 0;
+    
+    /** KALEIDO**/
+    int kalei = 0;//
+    int kaleiNb = 1;
+    int kaleiOffX = 0;
+    int kaleiOffY = 0;
+    ofShader kShader;
+    
+    bool randomTint = false;
+    
+    ofShader skewShader;
+    ofShader displaceShader;
+    ofShader chromaShader;
+    ofShader hdrShader;
+    ofShader gBlurHor;
+    ofShader sInvert;
+    ofShader alphaShader;
+    ofShader hueShader;
+    ofShader pixelHShader;
+    ofShader sobelShader;
+    ofShader threedeeShader;
+    ofShader gradientShader;
+    ofShader iThreshShader, threshShader;
+    
+    ofFbo fbo,fbo2, tempFbo;
+    
+    ofShader squareShader;
+    
+    /** OSC */
+    ofxOscReceiver receiver;
+    std::vector<ofVec3f> kinectPoints;
+    ofMesh kinectMesh, kinectMesh2, mesh;
+    ofImage kinectMask;
+    std::vector<ofVec2f> oldVectors;
+    
+    ImgLoadingThread* dbImg[4][4];
+    VideoLoadingThread* dbVideo[4][4];
+    ImgFolder* dbString[4][4];
+    ofThread dbVideoMutex;
+    
+    float gamma = 1;
+    bool invert = false;
+    float vblur = 0, hblur=0, blurOriginalMix = 1;
+    
+    bool spheric = false;
+    bool texturing = false;
+    bool cinemaBackground = false;
+    bool cinemaTexture = true;
+    
+    ofImage* texture=0;
+    
+    ofFile logfile;
+    
+    bool newFeatures = true;
+    
+    ofImage dixhuitmask, eqkomask, voutemask;
+    ofImage* maskImg=0;
+    
+    bool loadColorWithMacro = false;
+    float xOffset = 0;
+    
+    bool audioReaktivMap = false;
+    
+    float chromaSepAudio=0,skewAudio=0,skewVAudio=0,displaceAudio=0, displaceVAudio=0, kaleiAudio=0, blurHAudio=0, blurVAudio=0, gammaAudio=0, fadeAudio=0;
+    float rotAudio = 0, scaleAudio = 0;
+    
+    bool fullscreen = false;
+    
+    bool safeMode = false;
+    bool saveMacros = false;
+    
+    float tintBrightness = 1;
+    float dTintBrightness = 1;
+    bool black = false;
+    
+    int tintMode = -1;
+    
+    float modWheel = 0;
+    bool verticalPitchBend = false; //orientation of pitch bend effect
+    
+    float glowResolution = 18;
+    float glowAmnt = 2;
+    
+    float randHHide=0,randVHide=0;
+    bool glow = false;
+    bool sobel = false;
+    bool gradient = false;
+    
+    float audioGain = 1;
+    float audioEasing = 0.2;
+    float audioFilter = 1;
+    float currentRms;
+    bool metatron = false;
+    
+    /** TO SAVE IN MACROS **/
+    
+    bool omg3D = false, omg3D2 = false;
+    bool ball = false;
+    float kinectScale = 1;
+    bool kinectMasking = false;
+    
+    float kinectGrid[640][480];
+    
+    ofVbo vbo;
+    
+    float yyy=0;
+    
+    bool automode = false;
+    bool autoOnsets = false;
+    
+    /** INSTALLATION **/
+    bool INSTALLATION = true;
+    int presence = 0;
+    
+};
