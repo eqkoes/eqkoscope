@@ -121,7 +121,6 @@ if(1==0){
             gBlurHor.begin();
             gBlurHor.setUniform1f("vertical", 0);
             gBlurHor.setUniform1f("resolution", glowResolution);
-            gBlurHor.setUniform1f("blurDistance", glowAmnt);
             gBlurHor.setUniform1f("originalMix", 0);
             tempFbo.draw(0,0);
             gBlurHor.end();
@@ -131,7 +130,6 @@ if(1==0){
             gBlurHor.begin();
             gBlurHor.setUniform1f("vertical", 1);
             gBlurHor.setUniform1f("resolution", glowResolution);
-            gBlurHor.setUniform1f("blurDistance", glowAmnt);
             gBlurHor.setUniform1f("originalMix", 0);
             fbo.draw(0,0);
             gBlurHor.end();

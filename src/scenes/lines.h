@@ -34,8 +34,9 @@ public:
         ofSetColor(ofColor::white);
         float angle = 0;
         int mm = 1+app->parameterMap[lines_ySquare];
+        mm = mm==0 ? 1 : mm;
         int yres = int((1+app->parameterMap[lines_yres]*HEIGHT2/10)/mm)*mm;
-        int xres = int(20/mm)*mm;
+        int xres = max(1,int(20/mm)*mm);
         
         for(int y=yres/2-HEIGHT;y<HEIGHT+HEIGHT;y+=yres){
             ofPolyline b;
@@ -52,6 +53,7 @@ public:
                         az += at.w*(at.z) * ofMap(d, 1, dMax, 1, 0, true)*app->parameterMap[lines_zWeight];
                     }
                 }
+                mm = mm==0 ? 1 : mm;
                 float xx = int((x) / mm )* mm;
                 float yy = y + ay;
                 mm = 1+app->parameterMap[lines_zSquare]*HEIGHT2;
@@ -129,12 +131,15 @@ public:
                     case 4:
                         app->deltaMap[lines_zWeight] = (value)/127.0;
                         break;
-                    case 5:
+                    case 6:
                         app->deltaMap[speed] = (value-64)/127.0*100;
                         break;
-                    case 6:
-                        app->deltaMap[lines_ySquare] = (value)/127.0;
+                    case 75 :
+                        app->deltaMap[speed] = 0;
                         break;
+//                    case 6:
+//                        app->deltaMap[lines_ySquare] = (value)/127.0;
+//                        break;
                     case 7:
                         app->deltaMap[lines_zSquare] = (value)/127.0;
                         break;

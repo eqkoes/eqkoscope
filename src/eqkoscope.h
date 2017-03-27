@@ -33,11 +33,12 @@
 #include "agents.h"
 #include "Mapped.h"
 #include "ofxGifEncoder.h"
-#include "ofxOpenCv.h"
 #include "auto.h"
 #include "ofSerial.h"
 #include "LedStrip.h"
 #include <GLFW/glfw3.h>
+#include <ofxTCPClient.h>
+#include <ofxTCPServer.h>
 
 #ifdef LEAPMOTION
 #include "ofxLeapMotion.h"
@@ -143,6 +144,8 @@ public:
     void oscout(std::string head, vector<float> value);
     void oscout(std::string head, string values[], int length);
     
+    void updateLeap();
+    
     void tapTempo();
     
     void displayDualScenes();
@@ -240,7 +243,6 @@ protected:
     
     bool newFeatures = true;
     
-    ofImage theMaskImg;
     ofImage roundMaskImg;
     
     bool loadColorWithMacro = true;
@@ -362,8 +364,8 @@ protected:
     
     map<int,string> macroMap;
     
-    vector<ofFbo> echoFbos;
-    int MAX_NB_ECHOES = 100;
+    vector<ofFbo*> echoFbos;
+    int MAX_NB_ECHOES = 25;
     int currentEcho = 0;
     int lastEcho = 0;
 
@@ -377,6 +379,9 @@ protected:
     
     int macroPage = 0;
     string macroNames[128*MAX_MACRO_PAGES];
+    float macroMorphing = 0;
+    float macroMorphEvo = 1;
+    float macroMorphParameters[N_PARAM];
 
     ofShader fxShader;
     
@@ -407,6 +412,11 @@ protected:
     
     
     GLFWwindow* secondDisplay=0, *mainDisplay=0;
+
+/** TCP **/
+    ofxTCPClient tcpClient;
+    ofxTCPServer tcpServer;
+    ofxMidiMessage tcpMIDIMsg;
 };
 
 #endif

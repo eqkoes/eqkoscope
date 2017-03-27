@@ -93,9 +93,9 @@ public:
               buf[i] = 11;
         //            buf[i] += 48;
         
-        cout << "send " << (int)buf[0] << " " << (int)buf[1] << " "
-        << (int)buf[2]  << " " << (int)buf[3]<< " " << (int)buf[5] << endl
-        << (int)buf[10] << "|"  << (int)buf[11] << "|"  << (int)buf[12] << "|"  << (int)buf[13] << "|" << endl;
+//        cout << "send " << (int)buf[0] << " " << (int)buf[1] << " "
+//        << (int)buf[2]  << " " << (int)buf[3]<< " " << (int)buf[5] << endl
+//        << (int)buf[10] << "|"  << (int)buf[11] << "|"  << (int)buf[12] << "|"  << (int)buf[13] << "|" << endl;
         
         serial.writeBytes(buf, 16);
         serial.flush();

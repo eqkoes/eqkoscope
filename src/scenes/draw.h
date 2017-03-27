@@ -327,6 +327,13 @@ public:
     void capture(ofFbo* fbo){ }
     
     void update(){
+        if(ofGetFrameNum()%100==0) //grab focus
+#ifdef DEBUG
+            ofSystem("open -a eqkoscopeDebug.app");
+#else
+        ofSystem("open -a eqkoscope.app");
+#endif
+        
         if(embedScene!=0)
            embedScene->update();
         
@@ -347,7 +354,8 @@ public:
                     case MATCH:{
                         int nb = max(5.0, (*dest).size()/10.0);
                         for(int i=0;i<nb;i++){
-                            (*dest).erase(recPts.begin());
+//                            (*dest).erase(recPts.begin());
+                            (*dest).erase(dest->begin());
                             colors.erase(colors.begin());
                             if((*dest).size()==0)
                                 break;
@@ -1009,9 +1017,9 @@ public:
             case 'd':
                 transType = DISTANCE;
                 break;
-            case 'g':
-                preparePoints(int(ofRandom(allpts.size())));
-                break;
+//            case 'g':
+//                preparePoints(int(ofRandom(allpts.size())));
+//                break;
             case 'r':
                 app->parameterMap[draw_recording] = 0;
                 break;

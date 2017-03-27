@@ -30,8 +30,13 @@
 /** SPECIAL MODES **/
 //#define GAME 1
 #define LEAPMOTION 1
-//#define _LEDS_STRIP 1
+#define _LEDS_STRIP 1
 //#define LAZERS 1
+#define USE_FREEZE 1
+//#define MAPPING 1
+
+#define MASTER 1
+#define SLAVE 1
 
 #define EXTERNAL_MIDI_DEVICE "QUAD-CAPTURE"
 //#define MPD_DEVICE "P\216riph\216rique MIDI USB"

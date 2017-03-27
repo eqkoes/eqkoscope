@@ -49,7 +49,6 @@ public:
         parameterNameMap["kinectScale"]=kinectScale;
         parameterNameMap["kinectMasking"]=kinectMasking;
         parameterNameMap["glowResolution"]=glowResolution;
-        parameterNameMap["glowAmnt"]=glowAmnt;
         parameterNameMap["glowIntensity"]=glowIntensity;
         parameterNameMap["randHHide"]=randHHide;
         parameterNameMap["randVHide"]=randVHide;
@@ -65,7 +64,7 @@ public:
         parameterNameMap["sharpen"]=sharpen;
         parameterNameMap["sharpenMode"]=sharpenMode;
         parameterNameMap["nBlocks"]=nBlocks;
-        parameterNameMap["nShifts"]=nShifts;
+        parameterNameMap["nFreeze"]=nFreeze;
         parameterNameMap["strobe"]=strobe;
         parameterNameMap["xpixellate"]=xpixellate;
         parameterNameMap["ypixellate"]=ypixellate;
@@ -345,6 +344,7 @@ public:
         parameterNameMap["pertEvo"] = pertEvo;
         parameterNameMap["pertPersistance"] = pertPersistance;
         parameterNameMap["pertFreq"] = pertFreq;
+        parameterNameMap["glitchFreq"] = glitchFreq;
 
         parameterIDMap.resize(N_PARAM);
         for(map<string,int>::iterator it=parameterNameMap.begin();it!=parameterNameMap.end();it++)
@@ -385,6 +385,11 @@ public:
     ofImage i, grayi, audioImg;
     
     ofxIlda::Frame ildaFrame;   // stores and manages ILDA frame drawings
+    
+    int lastGlitchDate = 0;
+    bool doGlitches = false;
+    
+    float extAutoDimmer = 1;
 };
 
 #endif

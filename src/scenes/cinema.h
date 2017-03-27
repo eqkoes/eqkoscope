@@ -422,7 +422,15 @@ public:
             }else{
 #endif
                 players[player] = new ofVideoPlayer;
-                players[player]->loadMovie(strdb[dbIndex][i]);
+                try{
+                    string name = strdb[dbIndex][i];
+                    if(name.compare(""))
+                players[player]->loadMovie(name);
+                } 
+                catch ( const std::exception & e )
+                {
+                    cout << e.what() << endl;
+                }
             #ifdef USE_PRELOADED_MOVIES
             }
 #endif

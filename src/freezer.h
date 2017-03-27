@@ -104,7 +104,7 @@ public:
             imgs.erase(imgs.begin() + (ri)); //bourrin
             coords.erase(coords.begin() + (ri));
         }
-        while (shiftimgs.size ()>min(app->parameterMap[nShifts], MAX_SHIFT)) {
+        while (shiftimgs.size ()>min(app->parameterMap[nFreeze], MAX_SHIFT)) {
             int ri = int(ofRandom(shiftimgs.size()));
             delete shiftimgs[ri];
             delete shiftcoords[ri];

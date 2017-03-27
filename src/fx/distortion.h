@@ -21,6 +21,8 @@ static AbstractApp* app;
 static std::vector<ofVec4f> zs;
 static std::vector<ofFbo*> zsFbos;
 static std::vector<bool> zsFbosOk;
+static int MAX_OMG3D2_FBOS = 25;
+
 
 static ofImage sortImage;
 
@@ -62,7 +64,7 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
     
     ofEnableBlendMode(OF_BLENDMODE_ALPHA);
     
-    float nb = app->parameterMap[omg3D2Nb];
+    float nb = min((float)MAX_OMG3D2_FBOS, app->parameterMap[omg3D2Nb]);
     int MINDIST = 800;
     int MAXDIST = 4000*internalDist;
     
@@ -73,9 +75,6 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
                                  ,ofRandom(-WIDTH/4, WIDTH/4)
                                  , x/nb
                          ,(x%2)==0));
-            ofFbo* fbo = new ofFbo;
-            fbo->allocate(WIDTH, HEIGHT);
-            zsFbos.push_back(fbo);
             zsFbosOk.push_back(false);
         }
     }
@@ -240,17 +239,20 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
 static void displayOmg3D(ofFbo* src, ofFbo* dest){
     ofEnableBlendMode(OF_BLENDMODE_SCREEN);
     
-    float aa = app->parameterMap[omg3DAngle];
+    float intensity = app->parameterMap[omg3D];
+    float aa = app->parameterMap[omg3DAngle]*intensity;
     int W = app->FINALWIDTH;
     
     dest->begin();
     ofBackground(0);
     alphaShader.begin();
+    alphaShader.setUniform1f("alphaOffset", intensity);
     ofPushMatrix();
     {
         ofTranslate(app->FINALWIDTH/2, app->FINALHEIGHT/2 + (HEIGHT2-HEIGHT)/2);
         float a = aa ;
-        float l = 0.25;
+        float l = 0.25*intensity;
+        
         ofPushMatrix();
         ofTranslate(-app->FINALWIDTH*l, 0);
         ofRotateY(a);
@@ -370,7 +372,7 @@ static void pixellate(ofFbo* src, ofFbo* dest, float x, float y){
 
 static void sobelContours(ofFbo* src, ofFbo* dest){
     dest->begin();
-    sobelShader.load("../shaders/sobel");
+   // sobelShader.load("../shaders/sobel");
     sobelShader.begin();
     sobelShader.setUniform1i("fast", 1);
     sobelShader.setUniform1f("intensity", app->parameterMap[sobel]);
@@ -1046,6 +1048,12 @@ static void initGlitches(AbstractApp* a, float* skewVector){
     sortImage.allocate(WIDTH, HEIGHT, OF_IMAGE_COLOR_ALPHA);
     
     updateSkew(skewVector);
+    
+    for(int i=0;i<MAX_OMG3D2_FBOS;i++){
+        ofFbo* fbo = new ofFbo;
+        fbo->allocate(WIDTH, HEIGHT);
+        zsFbos.push_back(fbo);
+    }
 }
 
 #endif

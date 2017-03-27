@@ -31,7 +31,6 @@ void eqkoscope::initParameters(){
     parameterMap[ball] = false;
     parameterMap[thresholdAfterBall] = false;
     parameterMap[glowResolution] = 25;
-    parameterMap[glowAmnt] = 2;
     parameterMap[glowIntensity] = 1;
     parameterMap[borderMask] = 0;
     
@@ -51,7 +50,7 @@ void eqkoscope::initParameters(){
     parameterMap[sharpen] = 0;
     parameterMap[sharpenMode] = 0;
     parameterMap[nBlocks] = 0;
-    parameterMap[nShifts] = 0;
+    parameterMap[nFreeze] = 0;
     
     parameterMap[strobe] = false;
     parameterMap[xpixellate] = 0;
@@ -123,7 +122,7 @@ void eqkoscope::initParameters(){
     parameterMap[displaceAmp] = 0.;
     parameterMap[displaceVAmp]=0.;
     parameterMap[displaceProba] = 0.1;
-    parameterMap[chromaOffset] = 230;
+    parameterMap[chromaOffset] = 100;
     parameterMap[chromasepAngle]=0;
     parameterMap[chromasepHue]=50;
     parameterMap[chromaSep]=0.0;
@@ -262,7 +261,7 @@ void eqkoscope::initParameters(){
     parameterMap[lines_zWeight] = 1;
     parameterMap[lines_zSquare] = 0;
     parameterMap[lines_ySquare] = 0;
-    parameterMap[lines_yres] = 0.9;
+    parameterMap[lines_yres] = 0.1;
     parameterMap[lines_mesh] = 1; //choose between polyline or mesh : to be tested
    
     /** CINEMA **/
@@ -406,7 +405,9 @@ void eqkoscope::initParameters(){
     parameterMap[pertEvo] = 0;
     parameterMap[pertPersistance] = .5;
     parameterMap[pertFreq] = 10;
-}
+    
+    parameterMap[glitchFreq] = 45;
+    }
 
 void eqkoscope::randomParameters(){
     for(int p=0;p<=parameterNameMap.size();p++){

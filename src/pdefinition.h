@@ -50,7 +50,7 @@ blurOriginalMix=35,
 sharpen=36,
 sharpenMode=37,
 nBlocks=38,
-nShifts=39,
+nFreeze=39,
 strobe=40,
 xpixellate=41,
 ypixellate=42,
@@ -331,7 +331,8 @@ omg3D2Depth=316,
 pert=317,
 pertEvo=318,
 pertPersistance=319,
-pertFreq =320;
+pertFreq =320,
+glitchFreq=321;
 
 
 

@@ -285,6 +285,25 @@ void eqkoscope::parseMacro(string path){
         ofRect(0, 0, WIDTH, HEIGHT);
         fbo2.end();
         
+        macroMorphing = 0;
+        if(strEndsWith(path, "linesOmg.xml")){
+            macroMorphing = 10;
+        }
+        
+//        if(strEndsWith(path, "volcaBase.xml")  ||
+//           strEndsWith(path, "RED.xml") || strEndsWith(path, "v3.xml")
+//           || strEndsWith(path, "yes.xml")
+//           || strEndsWith(path, "ffff.xml")
+//           || strEndsWith(path, "ciiircle.xml")
+//           || strEndsWith(path, "trip.xml")|| strEndsWith(path, "waaaa.xml")){
+//            macroMorphing = 10;
+//        }
+        
+        if(macroMorphing>0){
+            for(int i=0;i<N_PARAM;i++)
+                macroMorphParameters[i] = deltaMap[i];
+        }
+        
         ofBuffer buffer = file.readToBuffer();
         ofXml macro;
         macro.loadFromBuffer(buffer.getText());
@@ -308,7 +327,7 @@ void eqkoscope::parseMacro(string path){
         }
         
         string mappingStr;
-        if(macro.setTo("parameterMapping")){
+        if(macro.exists("parameterMapping") && macro.setTo("parameterMapping")){
             controlFile = macro.getAttribute("path");
             if(!controlFile.compare("")){
                 mappingStr = macro.getValue();
@@ -341,7 +360,7 @@ void eqkoscope::parseMacro(string path){
                            name.compare("draw_recording") && name.compare("draw_destroy")
                            && name.compare("draw_destroyMode") && name.compare("tintBrightness") && name.compare("draw_currentDrawing")
                            && name.compare("#comment")) //todo opt and put away from map
-                            parameterMap[parameterNameMap[name]] = deltaMap[parameterNameMap[name]] = ofToFloat(ss[1]);
+                            deltaMap[parameterNameMap[name]] = ofToFloat(ss[1]);
                     }
                 }
                 macro.setToParent();
@@ -354,17 +373,11 @@ void eqkoscope::parseMacro(string path){
                         if(name.compare("draw_recording") && name.compare("draw_destroy")
                            && name.compare("draw_destroyMode") && name.compare("tintBrightness") && name.compare("draw_currentDrawing") && name.compare("#comment")) //todo opt and put away from map
                             
-                            parameterMap[parameterNameMap[macro.getName()]] = deltaMap[parameterNameMap[macro.getName()]] = macro.getFloatValue();;
+                             deltaMap[parameterNameMap[macro.getName()]] = macro.getFloatValue();;
                     }while(macro.setToSibling());
                 }
                 macro.loadFromBuffer(buffer.getText());
             }
-            
-            //            macro.setToParent();
-            //            macro.setToParent();
-            
-            
-            
         }else{
             macro.setTo("FX");
             
@@ -389,7 +402,7 @@ void eqkoscope::parseMacro(string path){
             parameterMap[sortYThresh] = macro.getFloatValue("sortYThresh");
             parameterMap[post_traitement] = macro.getFloatValue("post_traitement")==1;
             parameterMap[nBlocks] = macro.getFloatValue("nBlocks");
-            parameterMap[nShifts] = macro.getFloatValue("nShifts");
+            parameterMap[nFreeze] = macro.getFloatValue("nFreeze");
             parameterMap[kalei] = macro.getFloatValue("kalei");
             parameterMap[kaleiNb] = macro.getFloatValue("kaleiNb");
             parameterMap[kaleiOffX] = macro.getFloatValue("kaleiOffX");
@@ -427,6 +440,7 @@ void eqkoscope::parseMacro(string path){
             deltaMap[xpixellate] = macro.getFloatValue("xpixellateDelta");
             deltaMap[ypixellate] = macro.getFloatValue("ypixellateDelta");
             parameterMap[paint] = macro.getFloatValue("paint");
+            deltaMap[contrast] = parameterMap[contrast] = 0;
             
             if(macro.getNumChildren("blendType")>0)
                 parameterMap[blendType] = macro.getFloatValue("blendType");
@@ -463,44 +477,44 @@ void eqkoscope::parseMacro(string path){
             }
         }
         
-        if(macro.setTo("featuredParameter")){
+        if(macro.exists("featuredParameter") && macro.setTo("featuredParameter")){
             featuredParameter = parameterNameMap[macro.getAttribute("id")];
             macro.setToParent();
         }else
             featuredParameter = -1;
         
-        if(macro.setTo("leapXParameter")){
+        if(macro.exists("leapXParameter") && macro.setTo("leapXParameter")){
             leapXParameter = parameterNameMap[macro.getAttribute("id")];
             macro.setToParent();
         }else
             leapXParameter = -1;
         
-        if(macro.setTo("leapYParameter")){
+        if(macro.exists("leapYParameter") && macro.setTo("leapYParameter")){
             leapYParameter = parameterNameMap[macro.getAttribute("id")];
             macro.setToParent();
         }else
             leapYParameter = -1;
-        if(macro.setTo("leapZParameter")){
+        if(macro.exists("leapZParameter") && macro.setTo("leapZParameter")){
             leapZParameter = parameterNameMap[macro.getAttribute("id")];
             macro.setToParent();
         }else
             leapZParameter = -1;
-        if(macro.setTo("leapDXParameter")){
+        if(macro.exists("leapDXParameter") && macro.setTo("leapDXParameter")){
             leapDXParameter = parameterNameMap[macro.getAttribute("id")];
             macro.setToParent();
         }else
             leapDXParameter = -1;
-        if(macro.setTo("leapDYParameter")){
+        if(macro.exists("leapDYParameter") && macro.setTo("leapDYParameter")){
             leapDYParameter = parameterNameMap[macro.getAttribute("id")];
             macro.setToParent();
         }else
             leapDYParameter = -1;
-        if(macro.setTo("leapDZParameter")){
+        if(macro.exists("leapDZParameter") && macro.setTo("leapDZParameter")){
             leapDZParameter = parameterNameMap[macro.getAttribute("id")];
             macro.setToParent();
         }else
             leapDZParameter = -1;
-        if(macro.setTo("leapRollParameter")){
+        if(macro.exists("leapRollParameter") && macro.setTo("leapRollParameter")){
             leapRollParameter = parameterNameMap[macro.getAttribute("id")];
             macro.setToParent();
         }else
@@ -582,8 +596,61 @@ void eqkoscope::parseMacro(string path){
         }
     }
     
+    if(macroMorphing>0){
+        macroMorphEvo = 0;
+        // The following parameters are not morphed
+        macroMorphParameters[blendType] = deltaMap[blendType];
+        macroMorphParameters[strobe] = deltaMap[strobe];
+        macroMorphParameters[_invert] = deltaMap[_invert];
+        macroMorphParameters[vMirror] = deltaMap[vMirror];
+        macroMorphParameters[hMirror] = deltaMap[hMirror];
+        macroMorphParameters[kalei] = deltaMap[kalei];
+        macroMorphParameters[kalei_2] = deltaMap[kalei_2];
+        
+        
+        
+        if(macroMorphParameters[kaleiNb]<=1 || deltaMap[kaleiNb]<=1)
+            macroMorphParameters[kaleiNb] = deltaMap[kaleiNb];
+        
+        
+        //todo data structure with high level parameter and their low level attributes
+        if(macroMorphParameters[omg3D2]>0 && deltaMap[omg3D2]==0){
+            deltaMap[omg3D2Rotation] = macroMorphParameters[omg3D2Rotation];
+            deltaMap[omg3D2Dist] = macroMorphParameters[omg3D2Dist];
+            deltaMap[omg3D2YDivergence] = macroMorphParameters[omg3D2YDivergence];
+            deltaMap[omg3D2Divergence] = macroMorphParameters[omg3D2Divergence];
+            deltaMap[omg3D2Alpha0] = macroMorphParameters[omg3D2Alpha0];
+            deltaMap[omg3D2Nb] = macroMorphParameters[omg3D2Nb];
+        }
+        
+        if(macroMorphParameters[omg3D2]==0 && deltaMap[omg3D2]>0){
+            macroMorphParameters[omg3D2Rotation] = deltaMap[omg3D2Rotation];
+            macroMorphParameters[omg3D2Dist] = deltaMap[omg3D2Dist];
+            macroMorphParameters[omg3D2YDivergence] = deltaMap[omg3D2YDivergence];
+            macroMorphParameters[omg3D2Divergence] = deltaMap[omg3D2Divergence];
+            macroMorphParameters[omg3D2Alpha0] = deltaMap[omg3D2Alpha0];
+            macroMorphParameters[omg3D2Nb] = deltaMap[omg3D2Nb];
+        }
+        
+        
+        if(macroMorphParameters[tintSaturation]>0 && deltaMap[tintSaturation]==0){
+            deltaMap[tintHue] = macroMorphParameters[tintHue];
+        }
+        
+        if(macroMorphParameters[tintSaturation]==0 && deltaMap[tintSaturation]>0){
+            macroMorphParameters[tintHue] = deltaMap[tintHue];
+        }
+        
+        if((macroMorphParameters[_invert]>0 && deltaMap[_invert]==0) || (macroMorphParameters[_invert]==0 && deltaMap[_invert]>0)){
+            macroMorphParameters[_invert] = deltaMap[_invert];
+            macroMorphParameters[_gamma] = 1/macroMorphParameters[_gamma];
+        }
+
+    }else{
     for(int i=0;i<N_PARAM;i++)
-        deltaMap[i] = parameterMap[i];
+        parameterMap[i] = deltaMap[i];
+    }
+    
 }
 
 void eqkoscope::loadMacro(string path){

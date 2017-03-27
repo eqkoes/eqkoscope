@@ -744,11 +744,9 @@ public:
             im.resize(WIDTH, HEIGHT);
             imgs.push_back(im);
         }
-        if(HEIGHT==768){
-            circleMask.loadImage("assets/maskCircle1280x768.png");
-        }else if(HEIGHT==720){
+
             circleMask.loadImage("assets/maskCircle1280x720.png");
-        }
+
         circleMask.resize(app->FINALWIDTH, app->FINALHEIGHT);
     }
     

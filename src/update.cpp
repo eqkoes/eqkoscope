@@ -12,11 +12,9 @@ void eqkoscope::loadConfig(){
                 continue;
             string param = fields[0];
             string value = fields[1];
-#ifndef DEBUG
             if(!param.compare("live_mode"))
                 liveMode = ofToInt(value);
             else
-#endif
                 if(!param.compare("dualDisplay"))
                     dualDisplay = ofToInt(value);
                 else
@@ -208,20 +206,25 @@ void eqkoscope::addCommand(string commandString, bool factory){
         return;
     }
     if(!triggerTypeStr.compare("LEAP")){
-        if(fields.size()==6){
+        if(fields.size()>=5){
             a->type = LEAP;
-            a->leapDimension = ofToInt(fields[4]);
+            a->leapDimension = (fields[4]);
             a->smoothing = ofToFloat(fields[3]);
             vector<string> v = ofSplitString(fields[2], "/");
             if(v.size()>1){
                 for(int vIndex=0;vIndex<v.size();vIndex++)
                     a->addValue(ofToFloat(v[vIndex]));
+                if(fields.size()==6){
                 vector<string> v2 = ofSplitString(fields[5], "/");
                 if(v2.size()==2){
                     a->inputMinValue = ofToFloat(v2[0]);
                     a->inputMaxValue = ofToFloat(v2[1]);
+                }else{
+                    a->inputMinValue = ofToFloat(v2[0]);
+                    a->inputMaxValue = ofToFloat(v2[0]);
                 }
-                midiNoteonAutos.push_back(a);
+                }
+                leapAutos.push_back(a);
             }
         }
         return;
@@ -257,6 +260,25 @@ void eqkoscope::addCommand(string commandString, bool factory){
 
 void eqkoscope::update(){
     
+#ifndef MASTER //receive orders via TCP
+    int size = sizeof(ofxMidiMessage);
+    for(int i = 0; i<tcpServer.getLastID(); i++){ // getLastID is UID of all clients
+        if( tcpServer.isClientConnected(i) ){
+            int r;
+            while((r = tcpServer.receiveRawMsg(i, (char*)&tcpMIDIMsg, size))){
+            if(r==size){
+                cout << "received midi " << tcpMIDIMsg.control << endl;
+                //newMidiMessage(tcpMIDIMsg);
+            }
+            }
+        }
+    }
+#endif
+    
+#ifndef SLAVE
+    return;
+#endif
+    
 #ifdef LAZERS
 //    if(ofGetFrameNum()%50==49)
 //    laser.update();
@@ -277,7 +299,7 @@ void eqkoscope::update(){
     
     if(pause)
         return;
-    
+        
     float date = ofGetElapsedTimeMicros();
     
     if(debugMapping){
@@ -359,7 +381,13 @@ void eqkoscope::update(){
     
     
     
-    /** EASING **/ //TODO FLAG EASED PARAMS
+    /** EASING **/ //TODO FLAG EASED PARAMS -> check timing first
+    if(macroMorphing>0 && macroMorphEvo<1){
+        macroMorphEvo += 1/(ofGetFrameRate()*macroMorphing);
+          for(int i=0;i<N_PARAM;i++)
+              parameterMap[i] = macroMorphEvo*deltaMap[i] + (1-macroMorphEvo)*macroMorphParameters[i];
+    }else{
+    
     for(int i=0;i<N_PARAM;i++){
         if(i!=ledEvent){
         float v = parameterMap[i] + parameterEasingMap[i]*(deltaMap[i]-parameterMap[i]);
@@ -367,6 +395,7 @@ void eqkoscope::update(){
             v = 0;
         parameterMap[i] = v;
         }
+    }
     }
     
 //    parameterMap[chromasepAngle] += 0.6*(deltaMap[chromasepAngle]-parameterMap[chromasepAngle]); //angle update
@@ -389,7 +418,7 @@ void eqkoscope::update(){
     /** AUDIO IN**/
     if(parameterMap[_audioIn] || audioAutos.size()>0)
         for(int i=0;i<audioAutos.size();i++){
-            audioAutos[i]->update(max(0.0f, min(1.0f,currentRms[audioAutos[i]->channel])));
+            audioAutos[i]->update(max(0.0f, min(1.0f,currentRms[audioAutos[i]->channel] * extAutoDimmer)));
         }
     
     float autoDate = ofGetElapsedTimeMicros();
@@ -412,74 +441,7 @@ void eqkoscope::update(){
     
     
     /** LEAP **/
-#ifdef LEAPMOTION
-    fingersFound.clear();
-    long s = ofGetElapsedTimeMicros();
-    if(parameterMap[leapAutoReco] && !leap.isConnected()){
-        cout << "reco leap" << endl;
-        leap.open();
-    }
-    if(leap.isFrameNew()){
-        simpleHands = leap.getSimpleHands();
-        
-        if(simpleHands.size()){
-            float leapEasing = 0.6;
-            
-            leap.setMappingX(-200, 200, 0, 1);
-            leap.setMappingY(90, 490, 0, 1);
-            leap.setMappingZ(-200, 200, 0, 1);
-            
-            for(int i = 0; i < simpleHands.size(); i++){
-                
-                float meanX = 0;
-                float meanY = 0;
-                float meanZ = 0;
-                float meanRoll = 0;
-                float meanDX = 0;
-                float meanDY = 0;
-                float meanDZ = 0;
-                
-                meanX += simpleHands[i].handPos.x;
-                meanY += simpleHands[i].handPos.y;
-                meanZ += simpleHands[i].handPos.z;
-                meanRoll += abs(simpleHands[i].handNormal.x);
-                meanDX += simpleHands[i].handVelocity.x/300.0;
-                meanDY += simpleHands[i].handVelocity.y/300.0;
-                meanDZ += simpleHands[i].handVelocity.z/300.0;
-                
-                //adaptative easing
-                leapX[i] += (meanX-leapX[i])*(ofMap(abs(meanX-leapX[i]), 0.25, 0, 1, leapEasing, true));
-                leapY[i] += (meanY-leapY[i])*(ofMap(abs(meanY-leapY[i]), 0.25, 0, 1, leapEasing, true));
-                leapZ[i] += (meanZ-leapZ[i])*(ofMap(abs(meanZ-leapZ[i]), 0.25, 0, 1, leapEasing, true));
-                leapDX[i] += (meanDX-leapDX[i])*(ofMap(abs(meanDX-leapDX[i]), 0.25, 0, 1, leapEasing, true));
-                leapDY[i] += (meanDY-leapDY[i])*(ofMap(abs(meanDY-leapDY[i]), 0.25, 0, 1, leapEasing, true));
-                leapDZ[i] += (meanDZ-leapDZ[i])*(ofMap(abs(meanDZ-leapDZ[i]), 0.25, 0, 1, leapEasing, true));
-                leapRoll[i] += (meanRoll-leapRoll[i])*(ofMap(abs(meanRoll-leapRoll[i]), 0.25, 0, 1, leapEasing, true));
-                
-                //precision (too jittery instead)
-                float precision = 200;
-                //        leapX = int(leapX*precision)/precision;
-                //        leapY = int(leapY*precision)/precision;
-                //        leapZ = int(leapZ*precision)/precision;
-                //        leapDX = int(leapDX*precision)/precision;
-                //        leapDY = int(leapDY*precision)/precision;
-                //        leapDZ = int(leapDZ*precision)/precision;
-                //        leapRoll = int(leapRoll*precision)/precision;
-                
-                ofTouchEventArgs args;
-                args.set(meanX, meanY); //todo
-                args.pressure = meanZ;
-                
-                if(simpleHands[0].handNormal.y > 0.9)
-                    args.pressure = 12345;
-                cout << simpleHands[0].handNormal << endl;
-                if(simpleHands[0].fingers.size()>0 || simpleHands[1].fingers.size()>0){
-                    scenes[parameterMap[currentScene]]->touchMoved(args);
-                }
-            }
-        }
-    }
-#endif
+    updateLeap();
     
     updateMicros += microsEasing*(ofGetElapsedTimeMicros() - date - updateMicros);
 }

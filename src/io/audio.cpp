@@ -92,15 +92,13 @@ void eqkoscope::audioReceived(float *input, int bufferSize, int nChannels){
     
     int res = 4; //decimation
     float gain = pow(10, (parameterMap[audioGain])/20.0);
-//    cout << gain << endl;
-//    gain = 1;
     cout << "rms ";
     for(int i=0;i<nChannels;i++){
         currentRms[i] = 0;
         for(int y = 0;y<bufferSize;y+=res)
             currentRms[i] += input[y+i]*input[y+i];
         currentRms[i] = sqrt(currentRms[i]/(bufferSize/(res)))*gain;
-        cout <<" " << currentRms[i];
+        cout << " " << currentRms[i];
     }
     cout << endl;
 }

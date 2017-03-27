@@ -35,7 +35,7 @@ public:
         source = new ofFbo();
         source->allocate(WIDTH,HEIGHT, GL_RGBA);
         
-        circleMask.loadImage("assets/maskCircle1280x768.png");
+        circleMask.loadImage("assets/maskCircle1280x720.png");
         circleMask.resize(WIDTH,HEIGHT);
         
         load();
@@ -94,11 +94,11 @@ else
                 ofPushMatrix();
                 ofTranslate(WIDTH/2, HEIGHT/2);
                 ofTranslate(app->parameterMap[mediaX]*WIDTH, -app->parameterMap[mediaY]*HEIGHT, app->parameterMap[mediaZ]*HEIGHT);
-                  if(!sleep){
+//                  if(!sleep){
                 ofRotateX(app->parameterMap[mediaRotX]);
                 ofRotateY(app->parameterMap[mediaRotY]);
                 ofRotateZ(app->parameterMap[mediaRotZ]);
-                  }
+//                  }
                 
                 if(!sleep){
                     
@@ -348,7 +348,7 @@ else
                 switch(eventArgs.status){
                     case MIDI_CONTROL_CHANGE:{
                         switch(eventArgs.control){
-                            case 12:case 9:{
+                            case 9:{
                                 app->deltaMap[uziPeriod] = app->parameterMap[uziPeriod] = 1 + (int) (30*value/127);
                             }break;
                             case 16:{
