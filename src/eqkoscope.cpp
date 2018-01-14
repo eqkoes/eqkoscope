@@ -58,17 +58,25 @@ print_limits(void)
 using namespace std;
 
 void eqkoscope::setup(){
+#ifdef OFFLINE_RENDER
+    initOfflineMIDI();
+#endif
+    
 #ifdef LAZERS
     etherdream.setup();
     etherdream.setPPS(30000);
 #endif
     
     roundMaskImg.loadImage("assets/softroundmask_720p.png");
+    interMask.loadImage("assets/tubeMask.png");
+    mappingMask.loadImage("assets/mappingMask.png");
     
 #ifdef _LEDS_STRIP
     strip = new LedStrip(this);
     strip->setup();
 #endif
+    
+
     
     initParameterMap();
     initParameters();
@@ -104,6 +112,15 @@ void eqkoscope::setup(){
     leapRoll.resize(2);
 #endif
     
+#ifdef KINECT
+    kinectDevice.init(true, false, false);
+    kinectDevice.open();
+#endif
+    
+#ifdef INSTALL_THOUGHTS
+     thougts = new Thoughts(this);
+#endif
+    
     float date = 0;
     
     font.loadFont("Avenir", 16);
@@ -121,22 +138,18 @@ void eqkoscope::setup(){
     
     freezer = new Freezer(this);
     
-//    ofSetFullscreen(liveMode);
     if(liveMode)
         safeMode = true;
     
     cout << "dateC " << ofGetTimestampString() << endl;
 
-    initGlitches(this, skewVector);
+    initGlitches(this);
     cout << "dateD " << ofGetTimestampString() << endl;
 
     
     /** SCENES **/
     for(int i=0;i<3;i++){
         scenes.push_back(0);
-        ofFbo fbo;
-        fbo.allocate(WIDTH, HEIGHT2);
-        sceneFbos.push_back(fbo);
     }
     
         cout << "dateE " << ofGetTimestampString() << endl;
@@ -151,11 +164,11 @@ void eqkoscope::setup(){
     agents = new Agents(this);
 
     
-    for(int i=0;i<2;i++){
+    for(int i=0;i<1;i++){
         cinemas.push_back(new Cinema(this));
         cinemas[i]->setSleep(1);
     }
-    for(int i=0;i<2;i++){
+    for(int i=0;i<1;i++){
         uzis.push_back(new Uzi(this));
         uzis[i]->setSleep(1);
     }
@@ -182,6 +195,7 @@ void eqkoscope::setup(){
     allScenes.push_back(three);
     
     scenes[0] = feedbackScene;
+//    scenes[0] = three;
 #ifdef MAPPING
     scenes[0] = mapped;
 #endif
@@ -198,21 +212,13 @@ void eqkoscope::setup(){
     /** AUDIO **/
     initAudio();
     
-    pixelHShader.load("../shaders/pixelsH");
-    threedeeShader.load("../shaders/threeDee");
-    lineShader.load("../shaders/line");
-    sharpenShader.load("../shaders/sharpen");
-    saturationShader.load("../shaders/saturation");
-    testShader.load("../shaders/threeDee");
-    blendShader.load("../shaders/blend");
-    disposeShader.load("../shaders/dispose");
-    hueShiftShader.load("../shaders/hueShift");
-    maskShader.load("../shaders/dmask");
+    loadShaders();
     
     fbo.allocate(WIDTH, HEIGHT2, GL_RGBA);
     fbo2.allocate(WIDTH, HEIGHT2, GL_RGBA);
     tempFbo.allocate(WIDTH, HEIGHT2, GL_RGBA);
     tempFbo2.allocate(WIDTH, HEIGHT2, GL_RGBA);
+    psyFbo.allocate(WIDTH, HEIGHT2, GL_RGBA);
     
     copyFbo.allocate(WIDTH,HEIGHT);
     
@@ -231,12 +237,11 @@ void eqkoscope::setup(){
         }}
 
     
-    int brushDownSize = 3;
+    int brushDownSize = 2;
     for(int i=0;i<brushstrokes.size();i++){
         brushstrokes[i]->resize(brushstrokes[i]->width/brushDownSize,brushstrokes[i]->height/brushDownSize);
     }
     
-    int NB_PAINT_FRAMES = 50;
     for(int i=0;i<NB_PAINT_FRAMES;i++){
         paintFbos.push_back(new ofFbo);
         paintFbos[i]->allocate(WIDTH, HEIGHT);
@@ -265,23 +270,66 @@ void eqkoscope::setup(){
     if(liveMode)
         deltaMap[tintBrightness] = parameterMap[tintBrightness] = 0;
 
-    int tcpPort = ofRandom(10000,20000);
+//    int tcpPort = ofRandom(10000,20000);
+    int tcpPort = 12345;
 #ifndef MASTER
     tcpServer.setup(tcpPort);
 #endif
 #ifndef SLAVE
-    tcpClient.setup("192.168.0.43", tcpPort);
+    tcpClient.setup("192.168.0.25", tcpPort);
+#endif
+    
+#ifdef OFFLINE_RENDER
+    savingGif = true;
+    gifIndex = int(ofRandom(1,100000));
 #endif
 
+    stressTestFilterList.push_back(audio);
+    stressTestFilterList.push_back(_audioIn);
+    stressTestFilterList.push_back(paint);
+    stressTestFilterList.push_back(paint2);
+    stressTestFilterList.push_back(mediaZ);
+    stressTestFilterList.push_back(ball);
+    stressTestFilterList.push_back(_mask);
+    stressTestFilterList.push_back(movieSpeed);
+    stressTestFilterList.push_back(useJoyStick);
+    stressTestFilterList.push_back(tintBrightness);
+    stressTestFilterList.push_back(leapAutoReco);
+    stressTestFilterList.push_back(test);
+    stressTestFilterList.push_back(debug);
+    stressTestFilterList.push_back(kinect);
+    
+    genetic = new Genetic(this);
+#ifdef GENETIC
+    randomParameters();
+#endif
+    
+    //
+//    loadMacro("/Users/Raph/Dev/of_v0.8.4_osx_release/apps/myApps/Feedback/bin/data/Projects/Stienis/lightning.xml");
+    
 }
 
 void eqkoscope::swapFBOs(ofFbo* a, ofFbo* b){
     srcFbo = (srcFbo==&fbo) ? &fbo2 : &fbo;
     curFbo = (curFbo==&fbo) ? &fbo2 : &fbo;
+//    ofFbo* temp = a;
+//    a = b;
+//    b = temp;
 }
 
 void eqkoscope::draw(){
 
+    if(!shadowFrame && shadowFrames>0){
+        shadowFrame = true;
+        for(int i = 0; i < shadowFrames ; i++){
+            draw();
+            update();
+        }
+        shadowFrame = false;
+    }
+    
+    trueFrameNum++;
+    
 #ifndef SLAVE
     return;
 #endif
@@ -290,14 +338,15 @@ void eqkoscope::draw(){
     if(pause)
         return;
     
-    sceneMutex.lock();
-
-    
     long date = ofGetElapsedTimeMicros();
     
     doGlitches = false;
-    if((ofGetElapsedTimeMillis() - lastGlitchDate) > 1000/parameterMap[glitchFreq]
-       || ofRandom(ofGetElapsedTimeMillis() - lastGlitchDate) > 1000/parameterMap[glitchFreq]){
+    float tglitch = 1000/parameterMap[glitchFreq];
+#ifdef REAL_TIME_FX
+    tglitch /= restrictFrameRate/ofGetFrameRate();
+#endif
+    if(parameterMap[glitchFreq]>=30 || (ofGetElapsedTimeMillis() - lastGlitchDate) > tglitch
+       || ofRandom(ofGetElapsedTimeMillis() - lastGlitchDate) > tglitch){
         doGlitches = true;
         lastGlitchDate = ofGetElapsedTimeMillis();
     }
@@ -322,18 +371,22 @@ void eqkoscope::draw(){
     ofPushMatrix();
     
     grabFbo->begin();
-//    sceneMutex.lock();
+    sceneMutex.lock();
     if(scenes.size()>0 && scenes[0]!=0)
         scenes[0]->draw();
+#ifdef KINECT
+//    if(kinectDevice.isFrameNew()){
+//        kinectDevice.draw(0, 0);
+//    }
+#endif
     ofSetColor(255);
-//    sceneMutex.unlock();
+    sceneMutex.unlock();
     
     grabFbo->end();
     
     ofPopMatrix();
     
    fbo.begin(); //CPU
-//    sceneFbos[0].begin();
     
     grabFbo->draw(0, 0);
     
@@ -345,22 +398,20 @@ void eqkoscope::draw(){
     if (parameterMap[post_traitement]){
         ofSetColor(parameterMap[tintBrightness]*255, parameterMap[tintBrightness]*255, parameterMap[tintBrightness]*255);
         ofPushMatrix();
-//        sceneMutex.lock();
+        sceneMutex.lock();
         if(scenes[0]!=0){
             scenes[0]->mask();
             scenes[0]->capture(grabFbo);
         }
-//        sceneMutex.unlock();
+        sceneMutex.unlock();
         ofPopMatrix();
     }
     
         fbo.end();
-//    sceneFbos[0].end();
     
     /** FX **/
     curFbo = &fbo2;
         srcFbo = &fbo;
-//    srcFbo = &(sceneFbos[0]);
     
     applyFXChain(srcFbo, curFbo);
     
@@ -368,10 +419,10 @@ void eqkoscope::draw(){
     if (!(parameterMap[post_traitement]>BOOL_PARAM_EPSILON)){
         ofSetColor(parameterMap[tintBrightness]*255);
         ofPushMatrix();
-//        sceneMutex.lock();
+        sceneMutex.lock();
         scenes[0]->capture(srcFbo); //2
         scenes[0]->mask(); //1
-//        sceneMutex.unlock();
+        sceneMutex.unlock();
         ofPopMatrix();
     }
     
@@ -399,27 +450,20 @@ void eqkoscope::draw(){
     
     curFbo->begin();
     if(parameterMap[antiAliasing]>BOOL_PARAM_EPSILON){
+//        fxShader.load("../shaders/fx");
         fxShader.begin();
         fxShader.setUniform1f("alpha", parameterMap[tintBrightness]);
+        fxShader.setUniform1f("alphaMode", parameterMap[fadeOutMode]);
         fxShader.setUniformTexture("tDiffuse", srcFbo->getTextureReference(), 0);
-#ifndef GAME
         srcFbo->draw(xOffset, yOffset);
-#else
-        srcFbo->draw(0,0);
-#endif
         fxShader.end();
     }else{
-#ifndef GAME
         srcFbo->draw(xOffset,-(HEIGHT2-HEIGHT)/2 + yOffset);
-#else
-        srcFbo->draw(0,-(HEIGHT2-HEIGHT)/2 + 0);
-#endif
     }
     curFbo->end();
     swapFBOs(srcFbo, curFbo);
     
     /** END OF GLOBAL PARAMETERS **/
-    
 
     
     ofBackground(0);
@@ -428,41 +472,38 @@ void eqkoscope::draw(){
     
     ofTranslate(-(FINALWIDTH-WIDTH)/2, -(FINALHEIGHT-HEIGHT)/2);
     ofScale(FINALWIDTH/(float)WIDTH, FINALHEIGHT/(float)HEIGHT);
+//    ofScale(1, 1); //hack for installation (no rescaling)
     
     ofBackground(0);
     
     displayDualScenes();
     
+    applyPostProcess();
+    
     doPaint();
     
-    applyPostProcess();
+    sceneMutex.lock();
+    if(scenes[0]!= 0 && scenes[0]==mapped)
+        scenes[0]->mask();
+    sceneMutex.unlock();
     
     /** ECHO RECORD **/
     if(parameterMap[echoNb]>0){ //record each frame
-        //        if(ofGetElapsedTimeMillis()-lastEcho > parameterMap[echoPeriod]){
-        //            lastEcho = ofGetElapsedTimeMillis();
         currentEcho = (++currentEcho) % MAX_NB_ECHOES;
         echoFbos[currentEcho]->begin();
+        ofSetColor(255);
         srcFbo->draw(0,0);
-        if(app->parameterMap[roundMask]){
-            ofPushMatrix();
-            ofTranslate(WIDTH/2, HEIGHT2/2);
-            ofScale(1/app->parameterMap[roundMask], 1/app->parameterMap[roundMask]);
-            roundMaskImg.draw(-WIDTH/2, -HEIGHT/2, WIDTH, HEIGHT);
-            ofPopMatrix();
-        }
+        applyMask();
         echoFbos[currentEcho]->end();
-        //        }
     }
 
-    #ifdef USE_FREEZE
+#ifdef USE_FREEZE
     if (app->parameterMap[nFreeze]==0 && app->parameterMap[nBlocks] ==0)
         freezer->clear();
 #endif
     
     
     /** ECHOES **/
-    
     if(parameterMap[echoNb]>0){
         for(int e=0;e<parameterMap[echoNb];e++){
             int index;
@@ -474,7 +515,10 @@ void eqkoscope::draw(){
                 blendShader.begin();
                 blendShader.setUniform1i("mode", 0);
                 if(parameterMap[echoAdjust]>=1)
-                    blendShader.setUniform1f("_mix", 1/float(parameterMap[echoNb]));
+                    blendShader.setUniform1f("_mix", 1-(e)/float(parameterMap[echoNb]));
+                else
+                    blendShader.setUniform1f("_mix", 1);
+                blendShader.setUniform1f("thresh", 0.5);
                 echoFbos[index]->draw(0,0);
                 blendShader.end();
             }
@@ -495,24 +539,6 @@ void eqkoscope::draw(){
     
     srcFboMutex.unlock();
     
-    /** GAME **/
-    
-#ifdef GAME//game mode
-    float ded = true;
-    i.grabScreen(0, 0, WIDTH, HEIGHT2);
-    for(int x = -10;x<10;x++){
-        for(int y = -10;y<10;y++){
-            if(    i.getColor(WIDTH/2+x, HEIGHT2/2+y).getBrightness()<180){
-                ded = false;
-                break;
-            }
-        }
-    }
-    if(ded){
-        ofSetColor(255,0,0, 100);
-        ofRect(0,0,WIDTH,HEIGHT2);
-    }
-#endif
     
     ofSetColor(ofColor::black); //borders
     ofRect(0, -(HEIGHT2-HEIGHT)/2, WIDTH, 0);
@@ -523,14 +549,14 @@ void eqkoscope::draw(){
         audioImg.grabScreen(WIDTH/2-audioCapture/2, HEIGHT/2 - audioCapture/2, audioCapture, audioCapture);
     }
     
-    if((parameterMap[nFreeze]>0 && 0==0) || analyzeAudioB || savingGif || analyzeImg){
+    if(analyzeAudioB || savingGif || analyzeImg){
         i.grabScreen(0,0,WIDTH,HEIGHT);
         if(analyzeAudioB)
             analyzeAudio();
         if(savingGif){
             i.resize(GIF_WIDTH, GIF_HEIGHT);
             i.update();
-            i.saveImage("capture/gif_"+ofToString(gifIndex)+"/"+ofToString(ofGetFrameNum())+".jpg", OF_IMAGE_QUALITY_HIGH);
+            i.saveImage("capture/gif_"+ofToString(gifIndex)+"/"+ofToString(ofGetFrameNum())+".jpg", OF_IMAGE_QUALITY_BEST);
             isGifRecording = true;
         }
     }
@@ -596,7 +622,59 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         swapFBOs(srcFbo, curFbo);
     }
     
+    if(parameterMap[psyShift]){ //save the original content
+        psyFbo.begin();
+        srcFbo->draw(0,0);
+        psyFbo.end();
+    }
+    
     if(doGlitches){
+#ifdef USE_FREEZE
+#ifdef USE_FREEZE
+        if(doGlitches){
+            for (int i=0; i<app->parameterMap[nBlocks]; i++)
+                freezer->ablock();
+            
+            for (int j=0; j<app->parameterMap[nFreeze]; j++)
+                freezer->shift(srcFbo);
+        }
+#endif
+        
+        if(app->parameterMap[nFreeze]>1 || app->parameterMap[nBlocks]>=1){
+            srcFbo->begin();
+            freezer->display();
+            srcFbo->end();
+        }
+#endif
+        
+        if(parameterMap[noise]>BOOL_PARAM_EPSILON ){
+            doNoise(srcFbo, curFbo);
+            swapFBOs(srcFbo, curFbo);
+        }
+        
+        if(parameterMap[kalei]>BOOL_PARAM_EPSILON){
+            doKalei(srcFbo, curFbo, parameterMap[kaleiNb], parameterMap[kaleiOffX], parameterMap[kaleiOffY]);
+            swapFBOs(srcFbo, curFbo);
+        }
+        
+        if(doGlitches){
+            
+            
+            if(parameterMap[displaceAmp]>BOOL_PARAM_EPSILON){
+                displace(srcFbo, curFbo, parameterMap[displaceAmp]*WIDTH/8, parameterMap[displaceProba], false);
+                swapFBOs(srcFbo, curFbo);
+            }
+            if(parameterMap[displaceVAmp]>BOOL_PARAM_EPSILON){
+                displace(srcFbo, curFbo, parameterMap[displaceVAmp]*WIDTH/8, parameterMap[displaceProba], true);
+                swapFBOs(srcFbo, curFbo);
+            }
+            
+            if(parameterMap[carder]>BOOL_PARAM_EPSILON){
+                displaceGlitch(srcFbo, curFbo, parameterMap[carder], parameterMap[displaceProba], false);
+                swapFBOs(srcFbo, curFbo);
+            }
+        }
+        
     if(parameterMap[skewAmp]>0){
         skew(srcFbo, curFbo, parameterMap[skewAmp]/10.0, ofGetFrameNum()*3, 0,skewVector);
         swapFBOs(srcFbo, curFbo);
@@ -625,84 +703,6 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         swapFBOs(srcFbo, curFbo);
     }
     
-    
-    
-    if(doGlitches){
-    if(parameterMap[displaceAmp]>BOOL_PARAM_EPSILON){
-        displace(srcFbo, curFbo, parameterMap[displaceAmp]*WIDTH/8, parameterMap[displaceProba], false);
-        swapFBOs(srcFbo, curFbo);
-    }
-    if(parameterMap[displaceVAmp]>BOOL_PARAM_EPSILON){
-        displace(srcFbo, curFbo, parameterMap[displaceVAmp]*WIDTH/8, parameterMap[displaceProba], true);
-        swapFBOs(srcFbo, curFbo);
-    }
-
-    if(parameterMap[carder]>BOOL_PARAM_EPSILON){
-        displaceGlitch(srcFbo, curFbo, parameterMap[carder], parameterMap[displaceProba], false);
-        swapFBOs(srcFbo, curFbo);
-    }
-            }
-    
-    if(parameterMap[xpixellate]>BOOL_PARAM_EPSILON || parameterMap[ypixellate]>BOOL_PARAM_EPSILON){
-        pixellate(srcFbo, curFbo, parameterMap[xpixellate], parameterMap[ypixellate]);
-        swapFBOs(srcFbo, curFbo);
-    }
-    
-    
-    
-    if(parameterMap[vblur]>BOOL_PARAM_EPSILON){
-        blur(srcFbo, curFbo, parameterMap[vblur], parameterMap[blurOriginalMix], 5, true);
-        swapFBOs(srcFbo, curFbo);
-    }
-    if(parameterMap[hblur]>BOOL_PARAM_EPSILON){
-        blur(srcFbo, curFbo, parameterMap[hblur], parameterMap[blurOriginalMix], 5, false);
-        swapFBOs(srcFbo, curFbo);
-    }
-    
-//    if(abs(parameterMap[invertCircle])>BOOL_PARAM_EPSILON|| (!parameterMap[strobe] && parameterMap[_invert]>BOOL_PARAM_EPSILON) || (parameterMap[strobe] && (ofGetFrameNum()%2)!=parameterMap[_invert])){
-//        doInvert(srcFbo, curFbo);
-//        swapFBOs(srcFbo, curFbo);
-//    }
-//    
-    if(abs(parameterMap[_gamma]-1)>BOOL_PARAM_EPSILON || abs(parameterMap[contrast])>BOOL_PARAM_EPSILON){
-        doGamma(srcFbo, curFbo, parameterMap[_gamma]);
-        swapFBOs(srcFbo, curFbo);
-    }
-    
-
-    
-    if(parameterMap[sobel]>BOOL_PARAM_EPSILON){
-        sobelContours(srcFbo, curFbo);
-        swapFBOs(srcFbo, curFbo);
-    }
-    
-    if(parameterMap[chromaSep]>0 || parameterMap[tintSaturation]>0 || parameterMap[_reTint] || 1==1){ //saturation mgmt
-        chromaSeparation(srcFbo, curFbo, parameterMap[chromaSep], parameterMap[chromasepHue], parameterMap[chromasepAngle], parameterMap[chromaOffset], parameterMap[tintAmp], parameterMap[_reTint], parameterMap[sidesSaturation] + (blackNWhiteMedia?1:0));
-        swapFBOs(srcFbo, curFbo);
-        if(parameterMap[doubleChromaSep]){
-            chromaSeparation(srcFbo, curFbo, parameterMap[chromaSep]/2, parameterMap[chromasepHue], parameterMap[chromasepAngle], parameterMap[chromaOffset]/2, parameterMap[tintAmp], parameterMap[_reTint], parameterMap[sidesSaturation] + (blackNWhiteMedia?1:0));
-            swapFBOs(srcFbo, curFbo);
-        }
-    }
-    
-    if(parameterMap[kalei]>BOOL_PARAM_EPSILON){
-        doKalei(srcFbo, curFbo, parameterMap[kaleiNb], parameterMap[kaleiOffX], parameterMap[kaleiOffY]);
-        swapFBOs(srcFbo, curFbo);
-    }
-    
-    
-    if(parameterMap[sharpen]>BOOL_PARAM_EPSILON){
-        curFbo->begin();
-        sharpenShader.begin();
-        sharpenShader.setUniform1f("sharpen", parameterMap[sharpen]/0.7);
-        sharpenShader.setUniform1f("nPixels", parameterMap[sharpen]*3);
-        sharpenShader.setUniform1i("mode", (int) parameterMap[sharpenMode]);
-        srcFbo->draw(0,0);
-        sharpenShader.end();
-        curFbo->end();
-        swapFBOs(srcFbo, curFbo);
-    }
-    
     if(parameterMap[toLine]>BOOL_PARAM_EPSILON){
         curFbo->begin();
         lineShader.begin();
@@ -722,6 +722,94 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         swapFBOs(srcFbo, curFbo);
     }
     
+    if(parameterMap[psyShift]){
+        curFbo->begin();
+        srcFbo->draw(0,0);
+        ofSetColor(255,255,255,(1-parameterMap[psyShift]) * 255);
+        psyFbo.draw(0,0);
+        ofSetColor(255,255,255,255);
+        curFbo->end();
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+    //B4 displace etc (glitch block)
+
+    
+    if(parameterMap[xpixellate]>BOOL_PARAM_EPSILON || parameterMap[ypixellate]>BOOL_PARAM_EPSILON){
+        pixellate(srcFbo, curFbo, parameterMap[xpixellate], parameterMap[ypixellate]);
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+    if(parameterMap[vblur]>BOOL_PARAM_EPSILON){
+        blur(srcFbo, curFbo, parameterMap[vblur], parameterMap[blurOriginalMix], 5, true);
+        swapFBOs(srcFbo, curFbo);
+    }
+    if(parameterMap[hblur]>BOOL_PARAM_EPSILON){
+        blur(srcFbo, curFbo, parameterMap[hblur], parameterMap[blurOriginalMix], 5, false);
+        swapFBOs(srcFbo, curFbo);
+    }
+
+    if(abs(parameterMap[_gamma]-1)>BOOL_PARAM_EPSILON || abs(parameterMap[contrast])>BOOL_PARAM_EPSILON){
+        doGamma(srcFbo, curFbo, parameterMap[_gamma]);
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+
+    
+    bool doInvertion = false;
+    if(abs(parameterMap[invertCircle])>BOOL_PARAM_EPSILON|| (!parameterMap[strobe] && parameterMap[_invert]>BOOL_PARAM_EPSILON)
+       //|| (parameterMap[strobe] && (trueFrameNum%2)!=parameterMap[_invert])
+       ){
+        doInvertion = true;
+    }
+    
+    if(parameterMap[whitePoint]!=1 || parameterMap[blackPoint]!=0){
+        curFbo->begin();
+        chromaPointShader.begin();
+        chromaPointShader.setUniform1f("whitePoint", parameterMap[whitePoint]);
+        chromaPointShader.setUniform1f("blackPoint", parameterMap[blackPoint]);
+        srcFbo->draw(0,0);
+        chromaPointShader.end();
+        curFbo->end();
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+    if(parameterMap[chromaSep]>0 || parameterMap[tintSaturation]>0 || parameterMap[_reTint] || 1==1){ //saturation mgmt
+        chromaSeparation(srcFbo, curFbo, doInvertion, parameterMap[chromaSep], parameterMap[chromasepHue], parameterMap[chromasepAngle], parameterMap[chromaOffset], parameterMap[tintAmp], parameterMap[_reTint], parameterMap[sidesSaturation] + (blackNWhiteMedia?1:0));
+        swapFBOs(srcFbo, curFbo);
+        if(parameterMap[doubleChromaSep]){
+            chromaSeparation(srcFbo, curFbo, doInvertion, parameterMap[chromaSep]/2, parameterMap[chromasepHue], parameterMap[chromasepAngle], parameterMap[chromaOffset]/2, parameterMap[tintAmp], parameterMap[_reTint], parameterMap[sidesSaturation] + (blackNWhiteMedia?1:0));
+            swapFBOs(srcFbo, curFbo);
+        }
+    }
+    
+//    bwShader.load("../shaders/b&w");
+    if(parameterMap[bw]>0){
+    curFbo->begin();
+    bwShader.begin();
+    bwShader.setUniform1f("steps", parameterMap[bw]);
+    srcFbo->draw(0,0);
+    bwShader.end();
+    curFbo->end();
+    swapFBOs(srcFbo, curFbo);
+    }
+    
+    
+    if(parameterMap[sharpen]>BOOL_PARAM_EPSILON){
+        curFbo->begin();
+        sharpenShader.begin();
+        sharpenShader.setUniform1f("sharpen", parameterMap[sharpen]/0.7);
+        sharpenShader.setUniform1f("nPixels", parameterMap[sharpen]*3);
+        sharpenShader.setUniform1i("mode", (int) parameterMap[sharpenMode]);
+        srcFbo->draw(0,0);
+        sharpenShader.end();
+        curFbo->end();
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+    
+// 171017 : toLine and toCircle
+    
     if(parameterMap[dispose]){
         curFbo->begin();
         disposeShader.begin();
@@ -736,6 +824,51 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         swapFBOs(srcFbo, curFbo);
     }
     
+    if(parameterMap[squareMandala]>BOOL_PARAM_EPSILON){
+        curFbo->begin();
+//      if(ofGetFrameNum()%30==0)
+//                    squareMandalaShader.load("../shaders/squareMandala");
+        squareMandalaShader.begin();
+        squareMandalaShader.setUniform1f("WIDTH", WIDTH);
+        squareMandalaShader.setUniform1f("HEIGHT", HEIGHT2);
+        squareMandalaShader.setUniform1f("t", ofGetFrameNum());
+        squareMandalaShader.setUniform1f("resolution", parameterMap[squareMandala]);
+        srcFbo->draw(0,0);
+        squareMandalaShader.end();
+        curFbo->end();
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+    if(parameterMap[mandala]>BOOL_PARAM_EPSILON){
+        curFbo->begin();
+        mandalaShader.begin();
+        mandalaShader.setUniform1f("WIDTH", WIDTH);
+        mandalaShader.setUniform1f("HEIGHT", HEIGHT2);
+        mandalaShader.setUniform1f("t", ofGetFrameNum());
+        mandalaShader.setUniform1f("resolution", parameterMap[mandala]);
+        srcFbo->draw(0,0);
+        mandalaShader.end();
+        curFbo->end();
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+    if(parameterMap[sobel]>BOOL_PARAM_EPSILON){
+        sobelContours(srcFbo, curFbo);
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+    if(parameterMap[hueFilter]>0){
+        curFbo->begin();
+        hueFilterShader.begin();
+        hueFilterShader.setUniform1f("hue", parameterMap[hueFilter]);
+        srcFbo->draw(0,0);
+        hueFilterShader.end();
+        curFbo->end();
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+
+    
     if(parameterMap[hueShift]){
         curFbo->begin();
         hueShiftShader.begin();
@@ -745,6 +878,17 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         hueShiftShader.setUniform1f("crazyMode", parameterMap[hueShiftCrazy]);
         srcFbo->draw(0,0);
         hueShiftShader.end();
+        curFbo->end();
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+    if(parameterMap[hueKalei]){
+        curFbo->begin();
+//        hueCrazeShader.load("../shaders/hueCraze");
+        hueCrazeShader.begin();
+        hueCrazeShader.setUniform1f("n", parameterMap[hueKalei]+1);
+        srcFbo->draw(0,0);
+        hueCrazeShader.end();
         curFbo->end();
         swapFBOs(srcFbo, curFbo);
     }
@@ -785,56 +929,14 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
 //            ofPopMatrix();
 //        }
 //    }
+
     
-    // ofFbo copyFbo;
-    // copyFbo.allocate(WIDTH, HEIGHT);
-    //        copyFbo.begin();
-    //        ofBackground(0);
-    //        srcFbo->draw(0,-(HEIGHT2-HEIGHT)/2);
-    //        copyFbo.end();
-    //        pastFbos.push_back(copyFbo);
-    //        if(pastFbos.size()>nbPastFbos)
-    //            pastFbos.erase(pastFbos.begin());
-    
-    
-    /** GLOW **/
-//    if(parameterMap[glow]>BOOL_PARAM_EPSILON){ //B4
-//        tempFbo2.begin(); //source
-//        srcFbo->draw(0,0);
-//        tempFbo2.end();
-//
-//        doGlow(srcFbo, curFbo, &tempFbo, parameterMap[glow], parameterMap[glowIntensity], parameterMap[glowResolution]);
-//        ofEnableBlendMode(OF_BLENDMODE_ADD);
-//        curFbo->begin();
-//        srcFbo->draw(0,0);
-//        tempFbo2.draw(0,0);
-//        curFbo->end();
-//        swapFBOs(srcFbo, curFbo);
-//        ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-//    }
-    
-    #ifdef USE_FREEZE
-    if(app->parameterMap[nFreeze]>1 || app->parameterMap[nBlocks]>=1){
-        srcFbo->begin();
-        freezer->display();
-        srcFbo->end();
-    }
-#endif
-    
-#ifdef USE_FREEZE
-    if(doGlitches){
-        for (int i=0; i<app->parameterMap[nBlocks]; i++)
-            freezer->ablock();
-        
-        for (int j=0; j<app->parameterMap[nFreeze]; j++)
-            freezer->shift(srcFbo);
-    }
-#endif
+
 
     
     if(parameterMap[borderMask]>BOOL_PARAM_EPSILON){
         curFbo->begin();
-        //        maskShader.load("../shaders/dmask");
+//                maskShader.load("../shaders/dmask");
         maskShader.begin();
         maskShader.setUniform1f("thresh", 1-parameterMap[borderMask]);
         maskShader.setUniform1f("WIDTH", WIDTH);
@@ -852,63 +954,68 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         swapFBOs(srcFbo, curFbo);
     }
     
-//    if(parameterMap[omg3D2]>BOOL_PARAM_EPSILON){
-//        displayOmg3D2(srcFbo, curFbo, scenes[0]!=feedbackScene, parameterMap[omg3D2Speed],
+
+    
+    if(parameterMap[omg3D2]>BOOL_PARAM_EPSILON){
+        ofPushMatrix();
+        curFbo->begin();
+        ofBackground(0);
+        curFbo->end();
+
+        displayOmg3D2(srcFbo, curFbo, scenes[0]!=feedbackScene, parameterMap[omg3D2Speed],
+                      parameterMap[multiFbos]>BOOL_PARAM_EPSILON, parameterMap[omg3D2Rotation], parameterMap[omg3D2Dist], parameterMap[omg3D2Symetry],
+                      parameterMap[omg3D2FreeRotation], 0, 0);
+        ofPopMatrix();
+        //here
+//        tunnel(srcFbo, curFbo, scenes[0]!=feedbackScene, parameterMap[omg3D2Speed],
 //                      parameterMap[multiFbos]>BOOL_PARAM_EPSILON, parameterMap[omg3D2Rotation], parameterMap[omg3D2Dist], parameterMap[omg3D2Symetry],
 //                      parameterMap[omg3D2FreeRotation]);
-//        swapFBOs(srcFbo, curFbo);
-//    }
+        swapFBOs(srcFbo, curFbo);
+    }
     
 //    if(parameterMap[omg3D2]>BOOL_PARAM_EPSILON){
+//        ofPushMatrix();
 //        displayOmg3D2(srcFbo, curFbo, scenes[0]!=feedbackScene, parameterMap[omg3D2Speed],
 //                      parameterMap[multiFbos]>BOOL_PARAM_EPSILON, parameterMap[omg3D2Rotation], parameterMap[omg3D2Dist], parameterMap[omg3D2Symetry],
-//                      parameterMap[omg3D2FreeRotation]);
+//                      parameterMap[omg3D2FreeRotation], 0, 1);
+//        ofPopMatrix();
 //        swapFBOs(srcFbo, curFbo);
 //    }
-//    
-//    if(abs(parameterMap[invertCircle])>BOOL_PARAM_EPSILON|| (!parameterMap[strobe] && parameterMap[_invert]>BOOL_PARAM_EPSILON) || (parameterMap[strobe] && (ofGetFrameNum()%2)!=parameterMap[_invert])){
-//        doInvert(srcFbo, curFbo);
-//        swapFBOs(srcFbo, curFbo);
-//    }
-
     
     if(parameterMap[glow]>BOOL_PARAM_EPSILON){
         tempFbo2.begin(); //source
         srcFbo->draw(0,0);
         tempFbo2.end();
         
-        doGlow(srcFbo, curFbo, &tempFbo, parameterMap[glow], parameterMap[glowIntensity], parameterMap[glowResolution]);
-        swapFBOs(srcFbo, curFbo);
-        ofEnableBlendMode(OF_BLENDMODE_ADD);
+        doGlow(srcFbo, curFbo, &tempFbo, &tempFbo2, parameterMap[glow], parameterMap[glowIntensity], parameterMap[glowResolution]);
+        ofEnableBlendMode(OF_BLENDMODE_SCREEN);
         curFbo->begin();
         ofBackground(0);
-        srcFbo->draw(0,0);
         tempFbo2.draw(0,0);
+        srcFbo->draw(0,0);
         curFbo->end();
         swapFBOs(srcFbo, curFbo);
         ofEnableBlendMode(OF_BLENDMODE_ALPHA);
     }
+
     
-    if(parameterMap[omg3D2]>BOOL_PARAM_EPSILON){
-        displayOmg3D2(srcFbo, curFbo, scenes[0]!=feedbackScene, parameterMap[omg3D2Speed],
-                      parameterMap[multiFbos]>BOOL_PARAM_EPSILON, parameterMap[omg3D2Rotation], parameterMap[omg3D2Dist], parameterMap[omg3D2Symetry],
-                      parameterMap[omg3D2FreeRotation]);
-        swapFBOs(srcFbo, curFbo);
-    }
-    
-    if(abs(parameterMap[invertCircle])>BOOL_PARAM_EPSILON|| (!parameterMap[strobe] && parameterMap[_invert]>BOOL_PARAM_EPSILON) || (parameterMap[strobe] && (ofGetFrameNum()%2)!=parameterMap[_invert])){
+    if(abs(parameterMap[invertCircle])>BOOL_PARAM_EPSILON|| parameterMap[_invert]>BOOL_PARAM_EPSILON){
         doInvert(srcFbo, curFbo);
         swapFBOs(srcFbo, curFbo);
     }
     
-    //un etage de omg3D peut etre pas mal en cas d'utilisation d'omg3D2Y
-    
-    if(parameterMap[randHHide]>BOOL_PARAM_EPSILON){
-        randHide(srcFbo, curFbo, false);
+#ifndef NO_STROBE
+    if(parameterMap[strobe]!=0 && trueFrameNum%2!=0){
+        doStrobe(srcFbo, curFbo);
         swapFBOs(srcFbo, curFbo);
     }
-    if(parameterMap[randVHide]>BOOL_PARAM_EPSILON){
-        randHide(srcFbo, curFbo, true);
+#endif
+    
+    
+    //un etage de omg3D peut etre pas mal en cas d'utilisation d'omg3D2Y
+    
+    if(parameterMap[randHHide]>BOOL_PARAM_EPSILON || parameterMap[randVHide]>BOOL_PARAM_EPSILON){
+        randHide(srcFbo, curFbo);
         swapFBOs(srcFbo, curFbo);
     }
     if(parameterMap[kalei_2]>BOOL_PARAM_EPSILON){
@@ -934,7 +1041,6 @@ void eqkoscope::displayInfo(int w, int h){
     //    }
     
     ofPushMatrix();
-    //ofTranslate(w/2, h/2);
     
     if(saveMacros && ofGetFrameNum()%2 == 0){
         ofSetColor(ofColor::red);
@@ -976,9 +1082,9 @@ void eqkoscope::displayInfo(int w, int h){
             }
         }
         if(secondDisplay==0)
-        ofDrawBitmapString(str.str(), 50, h/4);
+            ofDrawBitmapString(str.str(), w/3, h/4);
         else
-        font2.drawString(str.str(), 50, h/4);
+            font2.drawString(str.str(), w/3, h/4);
         ofSetColor(ofColor::white);
     }
     
@@ -991,9 +1097,9 @@ void eqkoscope::displayInfo(int w, int h){
             str = "  "+saveMacroStr;
         
         if(secondDisplay==0)
-            ofDrawBitmapString(str, 50, h/2);
+            ofDrawBitmapString(str, w/2, h/2);
         else
-            font2.drawString(str, 50, h/2);
+            font2.drawString(str, w/2, h/2);
         ofSetColor(ofColor::white);
     }
     
@@ -1010,11 +1116,14 @@ void eqkoscope::displayInfo(int w, int h){
             if(scenes[i]!=0)
                 str << scenes[i]->getInfo() << endl;
         }
+        string macStr = currentMacroStr;
+        macStr = macStr.replace(0, currentMacroStr.size()-25, "");
+        str << "Crt. macro : []"<< macStr << endl;
 
         if(secondDisplay==0)
-        ofDrawBitmapString(str.str(), 50, 25);
+        ofDrawBitmapString(str.str(), w/2, h/4);
         else
-            font2.drawString(str.str(), 50, 25);
+            font2.drawString(str.str(), w/2, h/4);
         ofSetColor(ofColor::white);
     }
 
@@ -1022,61 +1131,21 @@ void eqkoscope::displayInfo(int w, int h){
 }
 
 void eqkoscope::displayDualScenes(){
-    ofPushMatrix();
-    ofTranslate(xOffset,yOffset);
 //    blendShader.load("../shaders/blend");
     
     ofSetColor(255);
     
-    ofPopMatrix();
-    
-    if(scenes[1]!=0){
-        bool crust = int(parameterMap[blendType])==MULTIPLY || int(parameterMap[blendType])==ADD||  int(parameterMap[blendType])==SCREEN || int(parameterMap[blendType])==SUBTRACT || int(parameterMap[blendType])==INCRUSTATION;
-        
-        if(crust){
-            tempFbo.begin();
-            ofBackground(0);
-            ofSetColor(255);
-            srcFbo->draw(0, -(HEIGHT2-HEIGHT)/2);
-            tempFbo.end();
-        }
-        
-        curFbo->begin();
-        ofTranslate(0, -(HEIGHT2-HEIGHT)/2);
-        
-        if(crust){
-        }else{
-            ofSetColor(255);
-            srcFbo->draw(0, 0);
-        }
-        
-        blendShader.begin();
-        blendShader.setUniform1i("mode", int(parameterMap[blendType]));
-        blendShader.setUniform1f("prollageFreq", parameterMap[prollage]);
-        blendShader.setUniform1f("WIDTH", WIDTH);
-        blendShader.setUniform1f("HEIGHT", HEIGHT);
-        blendShader.setUniform1f("trapeze", trapeze);
-        if(crust)
-            blendShader.setUniformTexture("tex1", tempFbo.getTextureReference(), 1);
-        ofPushMatrix();
-        scenes[1]->draw();
-        ofSetColor(255);
-        ofPopMatrix();
-        blendShader.end();
-        
-//        srcFbo->draw(0, -(HEIGHT2-HEIGHT)/2);
-//        ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-//        ofPushMatrix();
-//        scenes[1]->draw();
-//        ofSetColor(255);
-//        ofPopMatrix();
-//        ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-  
-        
+    curFbo->begin();
+    //ofTranslate(0, -(HEIGHT2-HEIGHT)/2);
+    srcFbo->draw(0,0);
+    blendShader.begin();
+    blendShader.setUniform1i("mode", int(parameterMap[blendType]));
+    if(scenes[1]!=0)
+    scenes[1]->draw();
+    blendShader.end();
+
         curFbo->end();
         swapFBOs(srcFbo,curFbo);
-    
-    }
 }
 
 void eqkoscope::applyPostProcess(){
@@ -1092,15 +1161,28 @@ void eqkoscope::applyPostProcess(){
     srcFbo->draw(0, -(HEIGHT2-HEIGHT)/2);
     if(trapeze!=0)
         trapezeShader.end();
-    if(app->parameterMap[roundMask]){
-        ofPushMatrix();
-    ofTranslate(WIDTH/2, HEIGHT2/2);
-    ofScale(1/app->parameterMap[roundMask], 1/app->parameterMap[roundMask]);
-    roundMaskImg.draw(-WIDTH/2, -HEIGHT/2, WIDTH, HEIGHT);
-    ofPopMatrix();
-    }
+    applyMask();
     curFbo->end();
-    curFbo->draw(0, 0);
+    swapFBOs(srcFbo, curFbo);
+    srcFbo->draw(0, 0);
+//        curFbo->draw(0, 0);
+}
+
+void eqkoscope::applyMask(){
+    if(app->parameterMap[_mask]){
+        ofPushMatrix();
+        ofTranslate(WIDTH/2, HEIGHT2/2);
+        if(app->parameterMap[_mask]==-1)
+            interMask.draw(-WIDTH/2, -HEIGHT/2, WIDTH, HEIGHT);
+        else
+            if(app->parameterMap[_mask]==-2)
+                mappingMask.draw(-WIDTH/2, -HEIGHT/2, WIDTH, HEIGHT);
+            else{
+                ofScale(1/app->parameterMap[_mask], 1/app->parameterMap[_mask]);
+                roundMaskImg.draw(-WIDTH/2, -HEIGHT/2, WIDTH, HEIGHT);
+        }
+        ofPopMatrix();
+    }
 }
 
 void eqkoscope::doPaint(){
@@ -1112,8 +1194,11 @@ void eqkoscope::doPaint(){
             int fboIndex = ofGetFrameNum() % paintFbos.size();
             paintFbos[fboIndex]->begin();
             
-            paintPass(60, 0.75, 1, &pix); //different passes for different sizes
+            paintPass(60, 0.75, 4, &pix); //different passes for different sizes
             paintPass(20, 0.25, 0.75, &pix);
+            
+//            paintPass(150, 0.25, 0.75, &pix); //different passes for different sizes
+//            paintPass(40, 0.1, 0.3, &pix);
             
             paintFbos[fboIndex]->end();
             
@@ -1156,7 +1241,7 @@ void eqkoscope::paintPass(int resolution, float minSize, float maxSize, ofPixels
             r = ofRandom(360);
             ofPushMatrix();
             ofTranslate(xx,yy);
-//            ofRotate(r);
+            ofRotate(r);
             int strokeIndex = (int)ofRandom(brushstrokes.size()-0.5);
             float sizeRatio = ofRandom(minSize, maxSize);
             brushstrokes[strokeIndex]->draw(-brushstrokes[strokeIndex]->width/2*sizeRatio, -brushstrokes[strokeIndex]->height/2*sizeRatio,
@@ -1201,14 +1286,26 @@ void eqkoscope::paintPass2(int resolution, float minSize, float maxSize, float r
 void eqkoscope::mouseMoved(int x, int y){
     if(scenes[parameterMap[currentScene]]==drawscene)
         drawscene->mouseMoved(x,y);
+    if(scenes[parameterMap[currentScene]]!=0)
+        scenes[parameterMap[currentScene]]->mouseMoved(x,y);
     if(featuredParameter>=0)
         deltaMap[featuredParameter] = parameterMap[featuredParameter] = ofMap(ofGetMouseX(), 0, float(WIDTH), 0, 1);
+    
+    if(parameterMap[useJoyStick]){
+//        deltaMap[omg3D2Speed] = (ofGetMouseY()/float(HEIGHT) - 0.5) * 0.02;
+        float xx = (ofGetMouseX()/float(WIDTH) - 0.5)*3;
+        float yy = -(ofGetMouseY()/float(HEIGHT) - 0.5)*3;
+        float ease = 0.1;
+        deltaMap[omg3D2RollerX] += (xx-deltaMap[omg3D2RollerX]) * ease;
+        deltaMap[omg3D2RollerY] += (yy-deltaMap[omg3D2RollerY]) * ease;
+    }
 }
 void eqkoscope::mouseDragged(int x, int y, int button){
     if(scenes[parameterMap[currentScene]]!=0)
         scenes[parameterMap[currentScene]]->mouseDragged(x,y,button);
     if(featuredParameter>=0)
-        deltaMap[featuredParameter] = parameterMap[featuredParameter] = ofMap(ofGetMouseX(), 0, float(WIDTH), 0, 1);
+//        deltaMap[featuredParameter] = parameterMap[featuredParameter] = ofMap(ofGetMouseX(), 0, float(WIDTH), 0, 1);
+    deltaMap[featuredParameter] = ofMap(ofGetMouseX(), 0, float(WIDTH), 0, 1);
     //    parameterMap[warpX] = deltaMap[warpX] =ofGetMouseX()/(float)WIDTH  -0.5;
     //    parameterMap[warpY] = deltaMap[warpY] =ofGetMouseY()/(float)HEIGHT - 0.5;
     
@@ -1224,8 +1321,14 @@ void eqkoscope::mouseDragged(int x, int y, int button){
 //    ildaFrame.getLastPoly().lineTo(x / (float)ofGetWidth(), y / (float)ofGetHeight());
 }
 void eqkoscope::mousePressed(int x, int y, int button){
-//    ildaFrame.addPoly();
+    if(scenes[parameterMap[currentScene]]!=0)
+        scenes[parameterMap[currentScene]]->mousePressed(x,y,button);
 }
+
+void eqkoscope::mouseScrolled(int x, int y){
+    
+}
+
 void eqkoscope::mouseReleased(int x, int y, int button){}
 void eqkoscope::dragEvent(ofDragInfo dragInfo){
     vector<string> files = dragInfo.files;
@@ -1236,18 +1339,24 @@ void eqkoscope::dragEvent(ofDragInfo dragInfo){
             loadMacroMap();
             return;
         }
+        string ext = ofToLower(f.getExtension());
         
-        if(!f.getExtension().compare("csv")){
+        if(!ext.compare("csv")){
             controlFile = f.getFileName();
             if(controlFile.compare(""))
                 loadMapping(ofBufferFromFile("parameterMappings/"+controlFile).getText(), false, true);
         }else{
-            if(!f.getExtension().compare("xml")){
+            if(!ext.compare("xml")){
                 loadMacro(f.getAbsolutePath());
             }else{
-                if(!f.getExtension().compare("mp4") || !f.getExtension().compare("webm") || !f.getExtension().compare("mov")
-                   || !f.getExtension().compare("avi")){
-                    if(scenes[app->parameterMap[currentScene]]==cinemas[0])
+                if(!ext.compare("mp4") || !ext.compare("webm") || !ext.compare("mov")
+                   || !ext.compare("avi")){
+                    if(scenes[app->parameterMap[currentScene]]==feedbackScene){
+                        feedbackScene->nestedScene = cinema;
+                        cinema->loadDirectMovie(f.getFileName());
+                        return;
+                    }
+                    if(cinemas.size()>0 && scenes[app->parameterMap[currentScene]]==cinemas[0])
                         cinemas[0]->loadDirectMovie(f.getFileName());
                     else{
                         if(scenes[app->parameterMap[currentScene]]!=cinema)
@@ -1255,9 +1364,15 @@ void eqkoscope::dragEvent(ofDragInfo dragInfo){
                         cinema->loadDirectMovie(f.getFileName());
                     }
                 }else{
-                    if(!f.getExtension().compare("jpg") || !f.getExtension().compare("jpeg") || !f.getExtension().compare("gif")
-                       || !f.getExtension().compare("png")){
-                        if(scenes[app->parameterMap[currentScene]]==uzis[0]){
+                    if(!ext.compare("jpg") || !ext.compare("jpeg") || !ext.compare("gif")
+                       || !ext.compare("png")){
+                        if(scenes[app->parameterMap[currentScene]]==feedbackScene){
+                            uzi->loadDirectImage(f.getAbsolutePath());
+                            feedbackScene->nestedScene = uzi;
+                            return;
+                        }
+
+                        if(uzis.size()>0 && scenes[app->parameterMap[currentScene]]==uzis[0]){
                             uzis[0]->loadDirectImage(f.getAbsolutePath());
                         }else{
                     if(scenes[app->parameterMap[currentScene]]!=uzi)
@@ -1288,7 +1403,7 @@ void eqkoscope::loadScene(Scene* s, int layer){
 }
 
 void eqkoscope::loadSoloScene(Scene* s){
-    sceneMutex.lock();
+    sceneMutex.lock(); //T1
     if(scenes[0]!=s && scenes[0]!=0)
         scenes[0]->exit();
     scenes[0] = s;
@@ -1320,6 +1435,12 @@ void eqkoscope::exit(){
     if(leap.isConnected())
         leap.close();
 #endif
+    
+#ifdef KINECT
+    if(kinectDevice.isConnected()){
+        kinectDevice.close();
+    }
+#endif
     logfile.close();
     
     if(tcpServer.isConnected())
@@ -1329,6 +1450,127 @@ void eqkoscope::exit(){
         for(int i=0;i<128;i++)
             launchpadOut.sendNoteOn(1, i, 0);
 }
+
+void eqkoscope::setResolution(int r){
+    switch(r){
+        case 720:{
+            crt_WIDTH = 1280;
+            crt_HEIGHT = 720;
+        }break;
+        case 1080:{
+            crt_WIDTH = 1900;
+            crt_HEIGHT = 1080;
+        }break;
+        default:{
+            crt_HEIGHT = r;
+            crt_WIDTH = 16*r/9;;
+        }
+            break;
+    }
+    FINALWIDTH = crt_WIDTH;
+    FINALHEIGHT = crt_HEIGHT;
+    
+    
+    i.allocate(WIDTH,HEIGHT, OF_IMAGE_COLOR);
+    fbo.allocate(WIDTH, HEIGHT2, GL_RGBA);
+    fbo2.allocate(WIDTH, HEIGHT2, GL_RGBA);
+    tempFbo.allocate(WIDTH, HEIGHT2, GL_RGBA);
+    tempFbo2.allocate(WIDTH, HEIGHT2, GL_RGBA);
+    copyFbo.allocate(WIDTH,HEIGHT);
+    
+    delete grabFbo;
+    grabFbo = new ofFbo;
+    grabFbo->allocate(WIDTH, HEIGHT2);
+    
+    for(int i=0;i<NB_PAINT_FRAMES;i++)
+        delete paintFbos[i];
+    paintFbos.clear();
+    for(int i=0;i<NB_PAINT_FRAMES;i++){
+        paintFbos.push_back(new ofFbo);
+        paintFbos[i]->allocate(WIDTH, HEIGHT);
+    }
+    paintFbo.allocate(WIDTH, HEIGHT);
+    
+    for(int i=0;i<MAX_NB_ECHOES;i++)
+        delete echoFbos[i];
+    echoFbos.clear();
+    for(int i=0;i<MAX_NB_ECHOES;i++){
+        ofFbo* fbo = new ofFbo;
+        fbo->allocate(WIDTH,HEIGHT2,GL_RGBA);
+        echoFbos.push_back(fbo);
+    }
+    
+    updateResolution();
+    
+//    ofSetupOpenGL(app->FINALWIDTH, app->FINALHEIGHT, OF_WINDOW);
+    ofSetWindowShape(app->FINALWIDTH, app->FINALHEIGHT);
+    
+    if(app->dualDisplay)
+        ofSetWindowPosition(-app->FINALWIDTH, 0);
+    
+    cinema->setResolution(r);
+    uzi->setResolution(r);
+    feedbackScene->setResolution(r);
+    lines->setResolution(r);
+}
+
+void eqkoscope::niceRandom(int x){
+    if(scenes[0]==cinema){
+        cinema->randomJump();
+    }
+    
+    deltaMap[skewAmp] = 0;
+    deltaMap[_reTint] = 0;
+    deltaMap[tintSaturation] = 1;
+    deltaMap[displaceAmp] = 0;
+    deltaMap[sobel]  = 0;
+    deltaMap[hueShift] = 0;
+    deltaMap[omg3D2] = 0;
+    deltaMap[kalei] = 0;
+    deltaMap[pert] = 0;
+    deltaMap[nFreeze] = 0;
+    
+    switch(x){
+        case 0:{ // tunnel
+            deltaMap[omg3D2] = 1;
+            deltaMap[omg3D2Dist] = ofRandom(0.5,1);
+            deltaMap[omg3D2Rotation] = 45*(int) ofRandom(0,12);
+            deltaMap[omg3D2HardRotation] = 1;
+            deltaMap[kalei] = (int) ofRandom(0,2);
+            deltaMap[kaleiNb] = (int) ofRandom(0,5);
+            
+        }break;
+        case 1:{ //liquid
+            //            deltaMap[_invert] = ofRandom(0, 1) < 0.5 ? 0 : 1;
+//            deltaMap[tintSaturation] = (int) ofRandom(0, 2);
+            deltaMap[sobel] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+            deltaMap[pert] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+            deltaMap[pertEvoAuto] = ofRandom(0, 0.2);
+            deltaMap[pertFreq] = ofRandom(1, 10);
+            deltaMap[skewAmp] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+            
+            
+           
+        }break;
+        case 2:{ //glitch
+            deltaMap[tintHue] = ofRandom(0, 1);
+            deltaMap[_reTint] = ofRandom(0, 1);
+            //            deltaMap[_invert] = ofRandom(0, 1) < 0.5 ? 0 : 1;
+            deltaMap[hueShift] = ofRandom(0, 1);
+            deltaMap[hueShiftCrazy] = (int) ofRandom(0, 2);
+            deltaMap[sobel] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+            deltaMap[pert] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+            deltaMap[displaceAmp] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+            deltaMap[displaceProba] = pow(ofRandom(0, 1), 3);
+            deltaMap[nFreeze] = ofRandom(0, 6) * (int) ofRandom(0, 2);
+            
+        }break;
+        default:;
+    }
+    //     for(int p=0;p<=N_PARAM;p++)
+    //         deltaMap[p] = parameterMap[p];
+}
+
 
 void eqkoscope::reset(){
     audioAutos.clear();
@@ -1341,6 +1583,8 @@ void eqkoscope::reset(){
     initParameters();
     initMidi();
     loadMacroMap();
+    initOSC();
+
     analyzeMacros();
     
     for(int i=0;i<N_PARAM;i++){

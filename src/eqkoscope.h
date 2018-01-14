@@ -39,6 +39,17 @@
 #include <GLFW/glfw3.h>
 #include <ofxTCPClient.h>
 #include <ofxTCPServer.h>
+#include "simple_midi_reader.h"
+//#include "ofxGrt.h"
+#include "genetic.h"
+
+#ifdef INSTALL_THOUGHTS
+#include "thoughts.h"
+#endif
+
+#ifdef KINECT
+#include "ofxKinect.h"
+#endif
 
 #ifdef LEAPMOTION
 #include "ofxLeapMotion.h"
@@ -58,13 +69,13 @@ public:
     
     void setup();
     void reset();
-    void initParameters();
-    void randomParameters();
     
     void loadMapping(std::string str, bool factory, bool erase);
+    void eraseControlMapping(bool factory);
     void addCommand(string cmd, bool factory);
     void loadConfig();
     void loadMacroMap();
+    void loadShaders();
     
     void update();
     void updateSerial();
@@ -87,6 +98,7 @@ public:
     void mouseMoved(int x, int y);
     void mouseDragged(int x, int y, int button);
     void mousePressed(int x, int y, int button);
+    void mouseScrolled(int x, int y);
     void mouseReleased(int x, int y, int button);
     void windowResized(int w, int h){}
     void dragEvent(ofDragInfo dragInfo);
@@ -104,6 +116,8 @@ public:
     void updateMidi();
     void resetMidi();
     void openPorts();
+    void initOfflineMIDI();
+    void updateOfflineMIDI();
     
     /** MACROS **/
     void parseMidi(ofxMidiMessage eventArgs);
@@ -141,6 +155,7 @@ public:
     bool manageOSCParam(ofxOscMessage *m);
     
     void oscout(std::string head, float value);
+    void oscout(std::string head, std::string value);
     void oscout(std::string head, vector<float> value);
     void oscout(std::string head, string values[], int length);
     
@@ -150,14 +165,22 @@ public:
     
     void displayDualScenes();
     void applyPostProcess();
+    void applyMask();
+    
+    void setResolution(int i);
+    
+    void niceRandom(int x);
+    
 
 protected:
     /** MACROS **/
     bool saveMacros = false;
     string saveMacroStr = "";
     std::vector<string> pendingMacros;
+    ofMutex macroMutex;
     int currentMacroCode = -1;
     std::string currentMacroStr = "";
+
     
     /** AUDIO **/
     bool analyzeAudioB = false;
@@ -167,22 +190,28 @@ protected:
     float fastrms=0;
     float audioEasing = 0.2;
     float audioFilter = 1;
-    float currentRms[2]; //max stereo
+    float currentRms[10]; //max stereo
     
     int nbFramesSinceAudioStart = 0;
     
     /** MIDI **/
+    string MIDIMapPath = "MIDIMap.csv";
+    
     std::vector<ofxMidiIn> midiIns;
     ofxMidiMessage midiMessage;
     std::vector<ofxMidiMessage> midiMsgs;
     ofxMidiOut launchpadOut;
     
+    bool is_mpd24 = false;
+    bool is_launchControl = false;
     bool is_io2 = false;
     bool is_external_device = false;
     bool is_novation = false;
     bool is_launchpad = false;
     bool is_nano = false;
     
+    bool enforce_mpd24 = false;
+    bool enforce_launchControl = false;
     bool enforce_io2 = false;
     bool enforce_external_device = false;
     bool enforce_novation = false;
@@ -209,16 +238,14 @@ protected:
     /** FREEZER */
     Freezer* freezer;
     
-    float skewVector[WIDTH];
-
     /** SHADERS **/
     ofShader testShader, blendShader;
     ofShader trapezeShader;
         
-    ofShader alphaShader,hueShader,threedeeShader,gradientShader,iThreshShader, threshShader,hBackShader,pixelHShader, lineShader, sharpenShader, alphaWhiteShader, saturationShader,disposeShader,hueShiftShader,maskShader;
+    ofShader alphaShader,hueShader,threedeeShader,gradientShader,iThreshShader, threshShader,hBackShader,pixelHShader, lineShader, sharpenShader, alphaWhiteShader, saturationShader,disposeShader,hueShiftShader,maskShader, mandalaShader,squareMandalaShader,hueCrazeShader, hueFilterShader, psyShiftShader, chromaPointShader,bwShader;
     
     /** DATA **/
-    ofFbo fbo,fbo2, tempFbo, tempFbo2;
+    ofFbo fbo,fbo2, tempFbo, tempFbo2, psyFbo;
     ofFbo* curFbo, *srcFbo;
     ofFbo *grabFbo;
     std::vector<ofFbo> sceneFbos;
@@ -243,7 +270,7 @@ protected:
     
     bool newFeatures = true;
     
-    ofImage roundMaskImg;
+    ofImage roundMaskImg,interMask,mappingMask;
     
     bool loadColorWithMacro = true;
         
@@ -284,15 +311,13 @@ protected:
     ofFbo copyFbo;
     
 
-    int GIF_WIDTH = 480;
-    int GIF_HEIGHT = 360;
-    bool savingGif = false;
+    int GIF_WIDTH = crt_WIDTH;
+    int GIF_HEIGHT = crt_HEIGHT;
     int gifIndex = 0;
     bool isGifRecording = false;
     
     
     // !!!
-    float restrictFrameRate = 30;
 
     bool BYPASS_ALL_PARAMETERS = false;
 
@@ -316,11 +341,14 @@ protected:
     int coffseta = 0;
     
     // LEAP
-    #ifdef LEAPMOTION
+#ifdef LEAPMOTION
     ofxLeapMotion leap;
     vector<float> leapX,leapY,leapZ,leapDX,leapDY,leapDZ,leapRoll;
     vector <ofxLeapMotionSimpleHand> simpleHands;
     vector <int> fingersFound;
+    float leapMeanX = 0;
+    float leapMeanY = 0;
+    float leapMeanZ = 0;
 #endif
     
     bool musicMode = false;
@@ -342,12 +370,12 @@ protected:
     /** SPECIAL **/
     
     bool stressTestFilter = true;
+    Genetic* genetic;
     
     bool debugMapping = false;
         
     
     std::string macroPath = "";
-    int featuredParameter = -1;
     int leapXParameter = -1;
     int leapYParameter = -1;
     int leapZParameter = -1;
@@ -355,7 +383,7 @@ protected:
     int leapDYParameter = -1;
     int leapDZParameter = -1;
    int leapRollParameter = -1;
-
+    
     int assignChannel = 3;
     int assignCtrl = 0;
     
@@ -365,7 +393,7 @@ protected:
     map<int,string> macroMap;
     
     vector<ofFbo*> echoFbos;
-    int MAX_NB_ECHOES = 25;
+    int MAX_NB_ECHOES = 75;
     int currentEcho = 0;
     int lastEcho = 0;
 
@@ -373,7 +401,7 @@ protected:
     float drawMicros, updateMicros, autoMicros;
     float microsEasing = 0.03;
     
-    float audioCapture = 320;
+    float audioCapture = 480;
     
     ofMutex srcFboMutex;
     
@@ -397,6 +425,9 @@ protected:
     
     vector<Auto*> ccAutoFastMap[16][127];
     vector<Auto*> noteAutoFastMap[16][127];
+    
+    string autoComments;
+
 
 #ifdef LAZERS
 //    ofxLaser::Manager laser;
@@ -417,6 +448,29 @@ protected:
     ofxTCPClient tcpClient;
     ofxTCPServer tcpServer;
     ofxMidiMessage tcpMIDIMsg;
+    
+    /** MIDI **/
+    vector<ofxMidiMessage> offlineMsgs;
+    vector<double> offlineMsgDates;
+    double offlineDate = 0;
+    int offlineMsgsIndex = 0;
+    
+    
+    /** HACK **/
+    float lastPerturbation = 0;
+    
+#ifdef KINECT
+    ofxKinect kinectDevice;
+    float kinectCalibration[640][480];
+#endif
+    
+#ifdef INSTALL_THOUGHTS
+    Thoughts *thougts;
+#endif
+    
+    int shadowFrames = 0;
+    bool shadowFrame = false;
+    long trueFrameNum = 0;
 };
 
 #endif

@@ -14,9 +14,9 @@ void eqkoscope::updateLeap(){
     if(leap.isFrameNew()){
         simpleHands = leap.getSimpleHands();
         bool isLeft = false, isRight = false;
-        float meanX = 0;
-        float meanY = 0;
-        float meanZ = 0;
+         leapMeanX = 0;
+         leapMeanY = 0;
+         leapMeanZ = 0;
         float meanRoll = 0;
         float meanDX = 0;
         float meanDY = 0;
@@ -29,22 +29,27 @@ void eqkoscope::updateLeap(){
             leap.setMappingY(150, 490, 0, 1);
             leap.setMappingZ(-200, 200, 0, 1);
             
-            for(int i = 0; i < simpleHands.size(); i++){
-                if(leap.getLeapHands()[0].grabStrength()==1) //closed fist
+            
+            vector <Hand> hands = leap.getLeapHands();
+            for(int i = 0; i < simpleHands.size() && i<hands.size(); i++){
+                 leapMeanX = 0;
+                leapMeanY = 0;
+                 leapMeanZ = 0;
+                if(hands[0].grabStrength()==1) //closed fist
                     continue;
                 
-                meanX += simpleHands[i].handPos.x;
-                meanY += simpleHands[i].handPos.y;
-                meanZ += simpleHands[i].handPos.z;
+                leapMeanX += simpleHands[i].handPos.x;
+                leapMeanY += simpleHands[i].handPos.y;
+                leapMeanZ += simpleHands[i].handPos.z;
                 meanRoll += abs(simpleHands[i].handNormal.x);
                 meanDX += simpleHands[i].handVelocity.x/300.0;
                 meanDY += simpleHands[i].handVelocity.y/300.0;
                 meanDZ += simpleHands[i].handVelocity.z/300.0;
                 
                 //adaptative easing
-                leapX[i] += (meanX-leapX[i])*(ofMap(abs(meanX-leapX[i]), 0.25, 0, 1, leapEasing, true));
-                leapY[i] += (meanY-leapY[i])*(ofMap(abs(meanY-leapY[i]), 0.25, 0, 1, leapEasing, true));
-                leapZ[i] += (meanZ-leapZ[i])*(ofMap(abs(meanZ-leapZ[i]), 0.25, 0, 1, leapEasing, true));
+                leapX[i] += (leapMeanX-leapX[i])*(ofMap(abs(leapMeanX-leapX[i]), 0.25, 0, 1, leapEasing, true));
+                leapY[i] += (leapMeanY-leapY[i])*(ofMap(abs(leapMeanY-leapY[i]), 0.25, 0, 1, leapEasing, true));
+                leapZ[i] += (leapMeanZ-leapZ[i])*(ofMap(abs(leapMeanZ-leapZ[i]), 0.25, 0, 1, leapEasing, true));
                 leapDX[i] += (meanDX-leapDX[i])*(ofMap(abs(meanDX-leapDX[i]), 0.25, 0, 1, leapEasing, true));
                 leapDY[i] += (meanDY-leapDY[i])*(ofMap(abs(meanDY-leapDY[i]), 0.25, 0, 1, leapEasing, true));
                 leapDZ[i] += (meanDZ-leapDZ[i])*(ofMap(abs(meanDZ-leapDZ[i]), 0.25, 0, 1, leapEasing, true));
@@ -61,8 +66,8 @@ void eqkoscope::updateLeap(){
                 //        leapRoll = int(leapRoll*precision)/precision;
                 
                 ofTouchEventArgs args;
-                args.set(meanX, meanY); //todo
-                args.pressure = meanZ;
+                args.set(leapMeanX, leapMeanY); //todo
+                args.pressure = leapMeanZ;
                 
                 if(simpleHands[0].handNormal.y > 0.9)
                     args.pressure = 12345;
@@ -75,33 +80,35 @@ void eqkoscope::updateLeap(){
                     isLeft = true;
                     for(Auto *a: leapAutos){
                         if(!a->leapDimension.compare("xl"))
-                            a->update(meanX);
+                            a->update(leapMeanX);
                         if(!a->leapDimension.compare("yl"))
-                            a->update(meanY);
+                            a->update(leapMeanY);
                         if(!a->leapDimension.compare("zl"))
-                            a->update(meanZ);
+                            a->update(leapMeanZ);
                     }
                 }
                 if(leap.getLeapHands()[i].isRight()){
                     isRight = true;
                     for(Auto *a: leapAutos){
                         if(!a->leapDimension.compare("xr"))
-                            a->update(meanX);
+                           
+                           
+                            a->update(leapMeanX);
                         if(!a->leapDimension.compare("yr"))
-                            a->update(meanY);
+                            a->update(leapMeanY);
                         if(!a->leapDimension.compare("zr"))
-                            a->update(meanZ);
+                            a->update(leapMeanZ);
                     }
                 }
             }
         
             for(Auto *a: leapAutos){
                 if(!a->leapDimension.compare("x"))
-                    a->update(meanX);
+                    a->update(leapMeanX);
                 if(!a->leapDimension.compare("y"))
-                    a->update(meanY);
+                    a->update(leapMeanY);
                 if(!a->leapDimension.compare("z"))
-                    a->update(meanZ);
+                    a->update(leapMeanZ);
                 if(!isLeft){
                     if(!a->leapDimension.compare("xl"))
                         a->update(0);
@@ -119,6 +126,8 @@ void eqkoscope::updateLeap(){
                         a->update(0);
                 }
             }
+            
+            cout << leapMeanX << ":" << leapMeanZ << endl;
         }
         
 

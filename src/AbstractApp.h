@@ -18,7 +18,7 @@ class AbstractApp
 public:
     
     ofColor getRandomColor(){
-        cout << "hsb " << parameterMap[tintCenter]*255 << " " << ofRandom(-parameterMap[tintAmp]/2.0, parameterMap[tintAmp]/2.0)*255.0f << " " <<endl;
+//        cout << "hsb " << parameterMap[tintCenter]*255 << " " << ofRandom(-parameterMap[tintAmp]/2.0, parameterMap[tintAmp]/2.0)*255.0f << " " <<endl;
         return ofColor::fromHsb(fmod(parameterMap[tintCenter]*255 + ofRandom(-parameterMap[tintAmp]/2.0, parameterMap[tintAmp]/2.0)*255.0f + 255.0f, 255.0f), parameterMap[sidesSaturation]*255, 255);
     }
     
@@ -34,13 +34,15 @@ public:
         parameterNameMap["omg3D2"]=omg3D2;
         parameterNameMap["omg3D2Dist"]=omg3D2Dist;
         parameterNameMap["omg3D2Y"]=omg3D2Y;
+        parameterNameMap["omg3D2x2"]=omg3D2x2;
         parameterNameMap["omg3D2Alpha0"]=omg3D2Alpha0;
         parameterNameMap["omg3D2AlphaZ"]=omg3D2AlphaZ;
         parameterNameMap["omg3D2RollerX"]=omg3D2RollerX;
         parameterNameMap["omg3D2RollerY"]=omg3D2RollerY;
         parameterNameMap["omg3D2Symetry"]=omg3D2Symetry;
         parameterNameMap["omg3D2Rotation"]=omg3D2Rotation;
-        parameterNameMap["omg3D2Divergence"]=omg3D2Divergence;
+        parameterNameMap["divergence"]=divergence;
+        parameterNameMap["omg3D2Divergence"]=divergence;
         parameterNameMap["omg3D2Speed"]=omg3D2Speed;
         parameterNameMap["omg3D2FreeRotation"]=omg3D2FreeRotation;
         parameterNameMap["omg3D2AvoidCenter"]=omg3D2AvoidCenter;
@@ -93,7 +95,7 @@ public:
         parameterNameMap["tintSaturation"]=tintSaturation;
         parameterNameMap["tintHue"]=tintHue;
         parameterNameMap["tintBrightness"]=tintBrightness;
-        parameterNameMap["black"]=black;
+        parameterNameMap["map_mask"]=map_mask;
         parameterNameMap["tintCenter"]=tintCenter;
         parameterNameMap["tintAmp"]=tintAmp;
         parameterNameMap["sidesSaturation"]=sidesSaturation;
@@ -248,8 +250,9 @@ public:
         parameterNameMap["circleRotation"]=circleRotation;
         parameterNameMap["circleDist"]=circleDist;
         parameterNameMap["z"]=z;
-        parameterNameMap["postT"]=postT;
-        parameterNameMap["omg3D2YDivergence"]=omg3D2YDivergence;
+        parameterNameMap["yDivergence"]=yDivergence;
+        parameterNameMap["yDivergence"]=yDivergence;
+        parameterNameMap["omg3D2YDivergence"]=yDivergence; //alias
         parameterNameMap["feedback"]=feedback;
         parameterNameMap["randomSpeed"]=randomSpeed;
         parameterNameMap["paint2"]=paint2;
@@ -259,14 +262,8 @@ public:
         parameterNameMap["uziPeriod"]=uziPeriod;
         parameterNameMap["nextImg"]=nextImg;
         parameterNameMap["omg3D2X"]=omg3D2X;
-        parameterNameMap["roundMask"]=roundMask;
+        parameterNameMap["mask"]=_mask;
         parameterNameMap["resize"]=resize;
-        parameterNameMap["kenBurns"]=kenBurns;
-        parameterNameMap["kenBurnsZ_end"]=kenBurnsZ_end;
-        parameterNameMap["kenBurnsZ"]=kenBurnsZ;
-        parameterNameMap["kenBurnsZ_pos"]=kenBurnsZ_pos;
-        parameterNameMap["kenBurnsZ_min"]=kenBurnsZ_min;
-        parameterNameMap["kenBurnsZ_max"]=kenBurnsZ_max;
         parameterNameMap["autoRot"]=autoRot;
         parameterNameMap["autoRotFreq"]=autoRotFreq;
         parameterNameMap["ak47Mode"]=ak47Mode;
@@ -293,7 +290,7 @@ public:
         parameterNameMap["draw_oy"]=draw_oy;
         parameterNameMap["draw_oz"]=draw_oz;
         parameterNameMap["draw_zSpeed"]=draw_zSpeed;
-        parameterNameMap["draw_rotY"]=draw_rotY;
+        parameterNameMap["bw"]=bw;
         parameterNameMap["draw_freskSpeed"]=draw_freskSpeed;
         parameterNameMap["draw_consecutive"]=draw_consecutive;
         parameterNameMap["draw_simplify"]=draw_simplify;
@@ -330,6 +327,7 @@ public:
         parameterNameMap["ledBrightness"]=ledBrightness;
         parameterNameMap["ledEvent"]=ledEvent;
         parameterNameMap["ledTint"]=ledTint;
+        parameterNameMap["ledStrobe"]=ledStrobe;
         parameterNameMap["echoAdjust"] = echoAdjust;
         parameterNameMap["omg3D2Scale"] = omg3D2Scale;
         parameterNameMap["omg3D2Strobe"] = omg3D2Strobe;
@@ -345,11 +343,37 @@ public:
         parameterNameMap["pertPersistance"] = pertPersistance;
         parameterNameMap["pertFreq"] = pertFreq;
         parameterNameMap["glitchFreq"] = glitchFreq;
+        parameterNameMap["aDivergence"] = aDivergence;
+        parameterNameMap["omg3D2ADivergence"] = aDivergence;
+        parameterNameMap["ledAuto"] = ledAuto;
+        parameterNameMap["fadeOutMode"] = fadeOutMode;
+        parameterNameMap["pertEvoAuto"] = pertEvoAuto;
+        parameterNameMap["useJoyStick"] = useJoyStick;
+        parameterNameMap["ledSaturation"] = ledSaturation;
+        parameterNameMap["uvLight"] = uvLight;
+        parameterNameMap["noise"] = noise;
+        parameterNameMap["mandala"] = mandala;
+        parameterNameMap["squareMandala"] = squareMandala;
+        parameterNameMap["bypassCTRL"] = bypassCTRL;
+        parameterNameMap["hueKalei"] = hueKalei;
+        parameterNameMap["hueFilter"] = hueFilter;
+        parameterNameMap["psyShift"] = psyShift;
+        parameterNameMap["whitePoint"] = whitePoint;
+        parameterNameMap["blackPoint"] = blackPoint;
+        parameterNameMap["pertMode"] = pertMode;
+//        parameterNameMap["pertMode"] = pertMode;
+//        parameterNameMap["pertMode"] = pertMode;
 
         parameterIDMap.resize(N_PARAM);
         for(map<string,int>::iterator it=parameterNameMap.begin();it!=parameterNameMap.end();it++)
             parameterIDMap[it->second] = it->first;
     }
+    
+    void initParameters();
+    void randomParameters();
+    void niceRandom(int x);
+    
+    virtual void addCommand(string cmd, bool factory)=0;
     
     bool blackNWhiteMedia = false; //indicates wether the media is black n white
     
@@ -368,11 +392,18 @@ public:
 
     bool controlFeedbackOverOmg3D2 = true;
     
-    float FINALWIDTH = WIDTH;
-    float FINALHEIGHT = HEIGHT;
+    /** PIXELS **/
+//    int crt_WIDTH = 1900;
+//    int crt_HEIGHT = 1080;
+    int crt_WIDTH = 1280;
+    int crt_HEIGHT = 720;
+    float FINALWIDTH = crt_WIDTH;
+    float FINALHEIGHT = crt_HEIGHT;
     bool MULTIPROJECTOR = false;
     bool liveMode = false;
     bool dualDisplay = false;
+    
+    int NB_PAINT_FRAMES = 5;
     
     bool pause = false;
 
@@ -382,6 +413,8 @@ public:
      std::map<string, int> parameterNameMap;
      std::vector<string> parameterIDMap;
     
+    vector<int> stressTestFilterList;
+    
     ofImage i, grayi, audioImg;
     
     ofxIlda::Frame ildaFrame;   // stores and manages ILDA frame drawings
@@ -389,7 +422,22 @@ public:
     int lastGlitchDate = 0;
     bool doGlitches = false;
     
+    float restrictFrameRate = 100;
+    
+    bool savingGif = false;
+
+    bool isCmdModifier = false;
+    bool isAltModifier = false;
+    
     float extAutoDimmer = 1;
+    bool audioOverOSC = false;
+    
+    float maxLedBrightness = 0.5;
+    
+    float currentTC = 0;
+    bool saveMacroTC;//dirty flag;
+
+    int featuredParameter = -1;
 };
 
 #endif

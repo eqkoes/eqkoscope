@@ -13,14 +13,16 @@ ofSoundStream mySoundStream;
 
 void eqkoscope::initAudio(){
 //    ofSoundStreamSetup(1, 1, this, 44100, AUDIO_BUFFER_SIZE, 4);
-    ofSoundStreamSetup(1, 2, this, 44100, AUDIO_BUFFER_SIZE, 4);
+//    ofSoundStreamSetup(1, 2, this, 44100, AUDIO_BUFFER_SIZE, 4);
     
-//    ofSoundStream::listDevices()
-//    
-//    mySoundStream.setup(1, 1, 44100, AUDIO_BUFFER_SIZE, 4);
-//    mySoundStream.setDeviceID(0);
-//    mySoundStream.setOutput(this);
-//    
+    mySoundStream.listDevices();
+//
+//    mySoundStream.setDeviceID(5); //soundflower 2ch
+    
+    mySoundStream.setup(2, 0, 44100, AUDIO_BUFFER_SIZE, 1);
+    mySoundStream.setDeviceID(0);
+    mySoundStream.setOutput(this);
+//
     
     for(int i=0;i<AUDIO_BUFFER_SIZE;i++)
         prev_audio[i] = -100;
@@ -37,42 +39,30 @@ void eqkoscope::audioRequested(float * output, int bufferSize, int nChannels){
     int index=0;
     ofImage* img = &audioImg;
 
-//    ofFloatPixels pix;
-//    srcFboMutex.lock();
-//    img ->readToPixels(pix);
-//    srcFboMutex.unlock();
-
     if(parameterMap[test]==0){
-    
-    
-    float freq = 1;
-    float smooth = 1;
-//        smooth = parameterMap["test"]+1;
-//    freq =parameterMap["test2"];
-    float b = bufferSize*smooth;
-    float gain = 0.5;
-    for(int i=0;i<bufferSize;i++){
-        coffset = int(coffset + freq) % (int(img->getHeight())/2-1);
-        float s = 0;
-        for(int j=0;j<smooth;j++){
-            int x,y;
-//             x = (img->getWidth()/2) + coffset*std::cos(2*PI*(j+i*bufferSize)/b);
-//             y = (img->getHeight()/2) + coffset*std::sin(2*PI*(j+i*bufferSize)/b);
-            coffset = audioCapture/2;
-                         x = (audioCapture/2) + coffset*std::cos(2*PI*(i+ofGetFrameNum())/b);
-                         y = (audioCapture/2) + coffset*std::sin(2*PI*(i+ ofGetFrameNum())/b);
-            ofColor c = img->getColor(x, y);
-//            float tmp = (c.r + c.b + c.g) / (3*255.0);
-            float tmp = max(c.r, max(c.b, c.g)) / (255.0);
-            s += tmp;
+        float freq = 1;
+        float smooth = 1;
+        float b = bufferSize*smooth;
+        float gain = 1;
+        for(int i=0;i<bufferSize;i++){
+            for(int chan=0;chan<nChannels;chan++){
+                float s = 0;
+                for(int j=0;j<smooth;j++){
+                    int x,y;
+                    coffset = audioCapture/2 - chan*audioCapture/4;
+                    x = (audioCapture/2) + coffset*std::cos(2*PI*(i+ofGetFrameNum())/b);
+                    y = (audioCapture/2) + coffset*std::sin(2*PI*(i+ ofGetFrameNum())/b);
+                    ofColor c = img->getColor(x, y);
+                    float tmp = max(c.r, max(c.b, c.g)) / (255.0);
+                    s += tmp;
+                }
+                s /= smooth;
+                //s = s*2 - 1; // on zero : zero*2 - 1 = -1
+                NULL;//without DC offset correction (works on zero samples)
+                output [i* nChannels + chan] = s*gain;
+            }
         }
-        s /= smooth;
-        s = s*2 - 1;
-        for(int chan=0;chan<nChannels;chan++)
-            output [i* nChannels + chan] = s*gain;
-    }
     }else{
-        cout << "raster" << endl;
         for(int i=0;i<bufferSize;i++){ //rasterization //TODO ADD RASTER or (+) (*)
             ofColor c = img->getColor(coffset%int(img->getWidth()), coffset/img->getWidth());
             float s =  2 * (c.r + c.b + c.g) / (3*255.0) - 0.5;
@@ -83,24 +73,23 @@ void eqkoscope::audioRequested(float * output, int bufferSize, int nChannels){
                 output [i* nChannels] = s;
         }
     }
-    
-    soundBufferOffset = (soundBufferOffset + bufferSize) % HEIGHT;
 }
 
 void eqkoscope::audioReceived(float *input, int bufferSize, int nChannels){
-    if((!parameterMap[_audioIn] && audioAutos.size()==0) || ofGetFrameNum()<3) return;
+    if((!parameterMap[_audioIn] && audioAutos.size()==0) || ofGetFrameNum()<3 || audioOverOSC) return;
     
     int res = 4; //decimation
     float gain = pow(10, (parameterMap[audioGain])/20.0);
-    cout << "rms ";
+    //tetttet   ette et t
+//    cout << "rms ";
     for(int i=0;i<nChannels;i++){
         currentRms[i] = 0;
         for(int y = 0;y<bufferSize;y+=res)
             currentRms[i] += input[y+i]*input[y+i];
         currentRms[i] = sqrt(currentRms[i]/(bufferSize/(res)))*gain;
-        cout << " " << currentRms[i];
+//        cout << " " << currentRms[i];
     }
-    cout << endl;
+//    cout << endl;
 }
 
 void eqkoscope::analyzeAudio(){

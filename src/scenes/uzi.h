@@ -62,7 +62,7 @@ public:
             return;
         
         if(app->parameterMap[autoSwitchImg]){
-            app->parameterMap[autoSwitchImg] = 0;
+            app->parameterMap[autoSwitchImg] =  app->deltaMap[autoSwitchImg] = 0;
             app->parameterMap[switchImg] = true;
             manualSwitchImg = true;
             int t = imgIndex;
@@ -75,13 +75,9 @@ public:
         int w = (!app->parameterMap[resize] || image->width > image->height) ? WIDTH : image->width*HEIGHT/image->height;
         int h = (!app->parameterMap[resize] || image->width < image->height) ? HEIGHT : image->height*WIDTH/image->width;
         
-        if( imgChanged ||
-           (!sleep && (app->parameterMap[kenBurns] >0 || app->parameterMap[autoRot]>0 || app->parameterMap[ak47Mode] ||  app->parameterMap[kenBurnsZ]) || 1==1)
-           ){
-            
-            if(imgChanged && sleep){
-                ;
-            }
+        if(imgChanged ||
+           (!sleep && (app->parameterMap[autoRot]>0 || app->parameterMap[ak47Mode] || 1==1)
+           )){
             
             source->begin();
             if(app->parameterMap[transluscentUzi])
@@ -90,29 +86,18 @@ else
             ofBackground(ofColor(0,0,0));
             if(app->parameterMap[ak47Mode] && !app->parameterMap[ak47Frame]){
             }else{
-                //                ak47Frame = false;
                 ofPushMatrix();
                 ofTranslate(WIDTH/2, HEIGHT/2);
-                ofTranslate(app->parameterMap[mediaX]*WIDTH, -app->parameterMap[mediaY]*HEIGHT, app->parameterMap[mediaZ]*HEIGHT);
-//                  if(!sleep){
+                  if(!sleep){
+                      ofTranslate(app->parameterMap[mediaX]*WIDTH, -app->parameterMap[mediaY]*HEIGHT, app->parameterMap[mediaZ]*HEIGHT);
                 ofRotateX(app->parameterMap[mediaRotX]);
                 ofRotateY(app->parameterMap[mediaRotY]);
                 ofRotateZ(app->parameterMap[mediaRotZ]);
-//                  }
+                  }
                 
-                if(!sleep){
-                    
-                if(app->parameterMap[kenBurnsZ]){
-                    float min =  app->parameterMap[kenBurnsZ_min];
-                    float s = ofMap(app->parameterMap[kenBurnsZ_pos], 0, 1, app->parameterMap[kenBurnsZ_min], app->parameterMap[kenBurnsZ_max]);
-                    if(app->parameterMap[kenBurnsZ_end]==0)
-                    app->parameterMap[kenBurnsZ_pos] = fmod(app->parameterMap[kenBurnsZ_pos] + app->parameterMap[kenBurnsZ], 1);
-                    else
-                        app->parameterMap[kenBurnsZ_pos] = std::min(double(app->parameterMap[kenBurnsZ_pos] + app->parameterMap[kenBurnsZ]), 1.0);
-                    ofScale(s<0?-1/(s-1):(s+1),  s<0?-1/(s-1):(s+1));
-                }
-                }else{
-
+                if(app->parameterMap[randomUzi]>1){
+                    int p = (int)max(1.0f, app->parameterMap[uziPeriod]);
+                    ofTranslate(0,0, app->parameterMap[randomUzi]*(ofGetFrameNum()%p / float(p)));
                 }
                 
                 if(app->parameterMap[vMirror])
@@ -122,24 +107,21 @@ else
                 
                 if(app->parameterMap[autoRot]>0)
                     ofRotate(45*app->parameterMap[autoRot]*sin(app->parameterMap[autoRotFreq]*ofGetFrameNum()/15.0));
-                
-                if(app->parameterMap[kenBurns]>0){
-                    float w1 = ofGetFrameNum()%200<100 ? -100 + (ofGetFrameNum() % 100) : 0 - (ofGetFrameNum() % 100);
-                    image->draw(-w/2 + w1, -h/2, (w+100), h);
-                }else{
-                    image->draw(-w/2, -h/2, (w), h);
-                }
+               
+                if(app->parameterMap[resize])
+                image->draw(-w/2, -h/2, (w), h);
+                else
+                    image->draw(-image->width/2, -image->height/2);
 
                 ofPopMatrix();
                 
                 mesh.clear();
-                
             }
             source->end();
             
             imgChanged = false;
             
-            if(app->parameterMap[parallax]){
+            /*if(app->parameterMap[parallax]){
                 mesh.clearColors();
                 int res = app->parameterMap[parallax_res];
                 for(int x=0;x<WIDTH;x+=res)
@@ -149,9 +131,9 @@ else
                         ofColor c = image->getColor(xx,yy);
                         mesh.addColor(c);
                     }
-            }
+            }*/
             
-            if(app->parameterMap[swapTint]){
+           /* if(app->parameterMap[swapTint]){
                 int res = 10;
                 
                 for(int t=0;t<255;t++)
@@ -230,12 +212,12 @@ else
                     }
                     swapTintMap[t] = fmod(255 + t + (swapTintPeaksRef[refPeak] - swapTintPeaksIn[inPeak]), 255);
                 }
-            }
+            }*/
         }
         
         ofTranslate(0, (HEIGHT2-HEIGHT)/2);
         
-        if(app->parameterMap[parallax]){
+     /*   if(app->parameterMap[parallax]){
             int wd = (!app->parameterMap[resize] || depth.width > depth.height) ? WIDTH : depth.width*HEIGHT/depth.height;
             int hd = (!app->parameterMap[resize] || depth.width < depth.height) ? HEIGHT : depth.height*WIDTH/depth.width;
             
@@ -253,13 +235,13 @@ else
                 }
             mesh.setMode(OF_PRIMITIVE_POINTS);
             //        mesh.setMode(OF_PRIMITIVE_LINES);
-        }
+        }*/
         
         imgMutex.unlock();
         
         
         if(app->parameterMap[swapTint]){
-            swapTintShader.load("../shaders/swapTint");
+//            swapTintShader.load("../shaders/swapTint");
             swapTintShader.begin();
             swapTintShader.setUniform1fv("tintMap", swapTintMap);
         }
@@ -302,11 +284,12 @@ else
 //        }else{
         if(!sleep || forceLoad){
                 forceLoad = false;
-                if ((app->parameterMap[randomUzi] && ofGetFrameNum()%((int)app->parameterMap[uziPeriod]) == 0) || app->parameterMap[switchImg] || manualSwitchImg) {
+                if ((app->parameterMap[randomUzi] && ofGetFrameNum()%((int)max(1.0f, app->parameterMap[uziPeriod])) == 0) || app->parameterMap[switchImg] || manualSwitchImg) {
                     app->blackNWhiteMedia = strdb[dbIndex][0].find("_b&w_")!=string::npos;
                     cout << "load " << strdb[dbIndex][imgIndex] << endl;
 //                    long s = ofGetElapsedTimeMillis();
                     image->loadImage(strdb[dbIndex][imgIndex]);
+                    currentMedia = strdb[dbIndex][imgIndex];
 //                    cout << ofGetElapsedTimeMillis()-s << endl;
                     if(app->parameterMap[randomUzi] && strdb[dbIndex].size()>1){
                         int lastIndex = imgIndex;
@@ -315,16 +298,17 @@ else
                         }while(lastIndex==imgIndex);
                         
                     }
-                    app->parameterMap[roundMask] = strdb[dbIndex][imgIndex].find("_round_")!=string::npos;
+                    app->parameterMap[_mask] = strdb[dbIndex][imgIndex].find("_round_")!=string::npos;
                     imgChanged = true;
                     scheduleSwitchImgOff = true;
-            app->parameterMap[switchImg] = app->deltaMap[switchImg] = false;
+                    app->parameterMap[switchImg] = app->deltaMap[switchImg] = false;
                 }else{
                     if (app->parameterMap[nextImg]) { //put dymanic load ?
                         imgIndex = (imgIndex + 1) % strdb.at(dbIndex).size();
                         imgMutex.lock();
                         image->loadImage(strdb[dbIndex][imgIndex]);
-                        app->parameterMap[roundMask] = strdb[dbIndex][imgIndex].find("_round_")!=string::npos;
+                        currentMedia = strdb[dbIndex][imgIndex];
+                        app->parameterMap[_mask] = strdb[dbIndex][imgIndex].find("_round_")!=string::npos;
                         imgMutex.unlock();
                         imgChanged = true;
                         app->parameterMap[nextImg] = false;
@@ -334,9 +318,11 @@ else
 //        }
     }
     
-    void mouseDragged(int x, int y, int button){
+    void mousePressed(int x, int y, int button){}
+void mouseDragged(int x, int y, int button){
     }
-    
+    void mouseMoved(int x, int y){}
+
     void touchMoved(ofTouchEventArgs &touch){
         
     }
@@ -344,6 +330,22 @@ else
     void midiEvent(ofxMidiMessage& eventArgs){
         float value = eventArgs.value;
         switch(eventArgs.channel){
+            case 1:{
+                if(eventArgs.status==MIDI_CONTROL_CHANGE){
+                    switch(eventArgs.control){
+                        case 105:{
+                            if(eventArgs.value>0)
+                                manualSwitch();
+                        }break;
+//            case 106:{
+//                uziSwitch();
+//            if(eventArgs.value==0)
+//                app->deltaMap[randomUzi] = false;
+//            }break;
+//                        case 107:app->deltaMap[randomUzi] = true;break;
+            }
+            }break;
+            }
             case 3: case 4:{
                 switch(eventArgs.status){
                     case MIDI_CONTROL_CHANGE:{
@@ -363,6 +365,7 @@ else
                                 break;
                         }
                     }break;
+                    
                     case MIDI_NOTE_ON:{
                         switch(eventArgs.pitch){
                             case 44:
@@ -371,23 +374,9 @@ else
                                     app->deltaMap[ak47Frame] = app->deltaMap[randomUzi];
                                 break;
                             case 48:
-                                app->deltaMap[switchImg] = true;
-                                manualSwitchImg = true;
-                                app->deltaMap[randomUzi] = true;
-                                if(app->parameterMap[ak47Mode])
-                                    app->deltaMap[ak47Frame] = true;
-                                break;
+                                uziSwitch(); break;
                             case 49:{
-                                app->deltaMap[switchImg] = true;
-                                manualSwitchImg = true;
-                                int t = imgIndex;
-                                do {
-                                    imgIndex = int(ofRandom(strdb.at(dbIndex).size()));
-                                }
-                                while (imgIndex == t && strdb.at(dbIndex).size()>1);
-                                cout << imgIndex << endl;
-                            }
-                                break;
+                                manualSwitch(); break;
                                 
                             default:
                                 if (eventArgs.pitch >=36 && eventArgs.pitch <46) {
@@ -447,6 +436,27 @@ else
             default:;
         }
     }
+
+    }
+    
+    void uziSwitch(){
+        app->deltaMap[switchImg] = true;
+        manualSwitchImg = true;
+        app->deltaMap[randomUzi] = true;
+        if(app->parameterMap[ak47Mode])
+            app->deltaMap[ak47Frame] = true;
+    }
+    
+    void manualSwitch(){
+        app->deltaMap[switchImg] = true;
+        manualSwitchImg = true;
+        int t = imgIndex;
+        do {
+            imgIndex = int(ofRandom(strdb.at(dbIndex).size()));
+        }
+        while (imgIndex == t && strdb.at(dbIndex).size()>1);
+        cout << imgIndex << endl;
+    }
     
     void load(){
         ofDirectory dir("uzi/");
@@ -476,6 +486,7 @@ else
     
     void loadDirectImage(string path){
         image->loadImage(path);
+        currentMedia = path;
         imgChanged = true;
         
         bool found = false;
@@ -500,7 +511,7 @@ else
     void keyPressed(int key){
         switch(key){
             case ' ':{
-                app->parameterMap[autoSwitchImg] = 1;
+                app->parameterMap[autoSwitchImg] = app->deltaMap[autoSwitchImg] =  1;
                
             }
                 break;
@@ -537,13 +548,19 @@ else
                     dbIndex = db;
                     imgIndex = i;
                     found = true;
+                    currentMedia = path;
                     break;
                 }
             }
             if(found)
                 break;
+            
+            app->parameterMap[autoSwitchImg] = app->deltaMap[autoSwitchImg] = false;
         }
-        
+    }
+    
+    string getCurrentMedia(){
+        return currentMedia;
     }
     
     void setDirty(){
@@ -559,15 +576,28 @@ else
         return "";
     }
     
+    void setResolution(int res){
+        delete source;
+        delete image;
+        
+        source = new ofFbo();
+        image = new ofImage;
+        
+        source->allocate(WIDTH,HEIGHT, GL_RGBA);
+        image->allocate(WIDTH,HEIGHT, OF_IMAGE_COLOR);
+    }
+    
 private:
     ofMutex imgMutex;
     
     ofFbo* source;
     ofImage img;
     ofImage circleMask;
-    
+    string currentMedia;
+
     ofMesh mesh;
     ofImage depth;
+    
     
     //VIDEO
     std::vector<std::vector<string> > strdb;

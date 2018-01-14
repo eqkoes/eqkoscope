@@ -37,13 +37,17 @@ public:
     }
     
     void update(float value){
-        if(parameterName==_invert)
-            cout << "woot" << endl;
+        
+        if(parameterName == ledEvent ){
+            app->deltaMap[ledEvent]++;
+            app->parameterMap[ledEvent]++;
+            return;
+        }
         
         float nValues = values.size();
         
         if(bin)
-            value = value ? 1 : 0;
+            value = (value>=0.0001) ? 1 : 0;
         float v;
         bool timedRandom = false;
         switch(type){
@@ -94,12 +98,12 @@ public:
                         v = getValue(value);
                     }else{
                         if(value>0){
-                            v = lastValue;
                             do{
-                            v = getValue(ofRandom(1));
-//                                cout << "while " << abs(lastValue-v) << " <= " <<abs(1/(5*(values[values.size()-1]-values[0]))) << endl;
-                            }while(abs(lastValue-v)>=abs(1/(5*(values[values.size()-1]-values[0]))));
+                                v = ofRandom(1);
+                            }while(abs(lastRandom-v) <= 1/5.0);
                         //variance de 1/5
+                            lastRandom = v;
+                            v = getValue(v);
                         }else{
                             return;
                         }
@@ -114,8 +118,10 @@ public:
                 app->deltaMap[parameterName] = app->parameterMap[parameterName] = v;
             }
         }else{
+            if(bin)
+                v = v>0 ? 1 : 0;
+            
             if(transcient){
-                cout << " value " << v  << ofGetElapsedTimeMillis() << endl;
                 app->parameterMap[parameterName] = v;
             }else{
                 app->deltaMap[parameterName] = v;
@@ -151,9 +157,14 @@ public:
             case OSC:
                 str = ("OSC,") + getCoreStr() + "," + oscPrefix;
                 break;
-            case MIDION:
-                str = ("NOTEON,") + getCoreStr() + "," + ofToString(channel) + "," + ofToString(minId);
-                break;
+            case MIDION:{
+                str = ("NOTEON,") + getCoreStr() + "," + ofToString(channel) + ",";
+                if(minId==maxId)
+                    str += ofToString(minId);
+                else
+                    str += ofToString(minId) + "/" + ofToString(maxId);
+
+                    }break;
             case MIDICC:
                 str = ("CC,") + getCoreStr() + "," + ofToString(channel) + "," + ofToString(minId);;
                 break;
@@ -214,12 +225,11 @@ public:
     int sens = 1;
     
     float lastValue = 0;
+    float lastRandom = 0;
     float targetValue = 0;
     
     bool bin = false;
     bool transcient = false;
-    
-//    bool noNoteRamp = false;
     
 private:
     int ulastDate = -1;

@@ -244,15 +244,14 @@ void eqkoscope::saveMacro(string path){
         str << a->toString() << endl;
     for(Auto* a : timedAutos)
         str << a->toString() << endl;
+    str << autoComments << endl;
     str << "</parameterMapping>" << endl;
     
     str << "<featuredParameter id=\"" << featuredParameter << "\"/>" << endl;
     str << "<leapXParameter id=\"" << leapXParameter << "\"/>" << endl;
     str << "<leapYParameter id=\"" << leapYParameter << "\"/>" << endl;
     
-    
     str << "<scenes>" << endl;
-    
     for(int i=0;i<scenes.size();i++){
         if(scenes[i]!=0){
             str << "<scene layer=\"" << i << "\">" << endl;
@@ -278,26 +277,30 @@ void eqkoscope::parseMacro(string path){
     if(file.exists()){
         fbo.begin(); //reset fbos
         ofSetColor(0, 0, 0);
-        ofRect(0, 0, WIDTH, HEIGHT);
+        ofRect(0, 0, crt_WIDTH, crt_HEIGHT);
         fbo.end();
         fbo2.begin();
         ofSetColor(0, 0, 0);
-        ofRect(0, 0, WIDTH, HEIGHT);
+        ofRect(0, 0, crt_WIDTH,crt_HEIGHT);
         fbo2.end();
         
         macroMorphing = 0;
-        if(strEndsWith(path, "linesOmg.xml")){
+        if(strEndsWith(path, "transi.xml") ||
+           strEndsWith(path, "foudreColor.xml")||
+           strEndsWith(path, "uziMask.xml")){
             macroMorphing = 10;
         }
         
-//        if(strEndsWith(path, "volcaBase.xml")  ||
+        if(
+//           strEndsWith(path, "volcaBase.xml")  ||
+           strEndsWith(path, "linesOmg.xml")
 //           strEndsWith(path, "RED.xml") || strEndsWith(path, "v3.xml")
-//           || strEndsWith(path, "yes.xml")
-//           || strEndsWith(path, "ffff.xml")
-//           || strEndsWith(path, "ciiircle.xml")
-//           || strEndsWith(path, "trip.xml")|| strEndsWith(path, "waaaa.xml")){
-//            macroMorphing = 10;
-//        }
+           ||strEndsWith(path, "yes.xml")
+           || strEndsWith(path, "ffff.xml")
+           || strEndsWith(path, "ciiircle.xml")
+           || strEndsWith(path, "trip.xml")|| strEndsWith(path, "waaaa.xml")){
+            macroMorphing = 10;
+        }
         
         if(macroMorphing>0){
             for(int i=0;i<N_PARAM;i++)
@@ -307,6 +310,8 @@ void eqkoscope::parseMacro(string path){
         ofBuffer buffer = file.readToBuffer();
         ofXml macro;
         macro.loadFromBuffer(buffer.getText());
+        
+        
         
         bool v2 = ofStringTimesInString(buffer.getText(), "<scenes>");
         bool v3 = !macro.getAttribute("version").compare("v3");
@@ -346,8 +351,6 @@ void eqkoscope::parseMacro(string path){
             macro.setTo("FX");
             
             /** COMPATIBILITY **/
-            if(macro.getValue("kenBurnsZ").empty())
-                parameterMap[kenBurnsZ] = 0;
             
             if(v3){
                 string csvFXParams = macro.getValue();
@@ -359,6 +362,7 @@ void eqkoscope::parseMacro(string path){
                         if(name.compare("tintBrightness") &&
                            name.compare("draw_recording") && name.compare("draw_destroy")
                            && name.compare("draw_destroyMode") && name.compare("tintBrightness") && name.compare("draw_currentDrawing")
+//                           && name.compare("ledBrightness")
                            && name.compare("#comment")) //todo opt and put away from map
                             deltaMap[parameterNameMap[name]] = ofToFloat(ss[1]);
                     }
@@ -430,8 +434,8 @@ void eqkoscope::parseMacro(string path){
             deltaMap[omg3D2Rotation] = parameterMap[omg3D2Rotation];
             parameterMap[omg3D2Dist] = macro.getFloatValue("omg3D2Dist");
             deltaMap[omg3D2Dist] = parameterMap[omg3D2Dist];
-            parameterMap[omg3D2Divergence] = macro.getFloatValue("omg3D2Divergence");
-            deltaMap[omg3D2Divergence] = parameterMap[omg3D2Divergence];
+            parameterMap[divergence] = macro.getFloatValue("omg3D2Divergence");
+            deltaMap[divergence] = parameterMap[divergence];
             parameterMap[omg3D2Symetry] =macro.getFloatValue("omg3D2Symetry")==1;
             parameterMap[omg3D2FreeRotation] =macro.getFloatValue("omg3D2FreeRotation")==1;
             parameterMap[omg3D2Speed] = macro.getFloatValue("omg3D2Speed");
@@ -546,12 +550,11 @@ void eqkoscope::parseMacro(string path){
                 
                 macro.setToChild(1);
                 scenes[0]->loadMacro(&macro);
-                
-                parameterMap[kenBurnsZ] = 0;
             }
             else{
                 if(macro.exists("scenes")){
                     macro.setTo("scenes");
+                    
                     for(int i=0;i<3;i++){
                         if(!macro.setToChild(i)){
                             loadScene(0, i);
@@ -617,8 +620,8 @@ void eqkoscope::parseMacro(string path){
         if(macroMorphParameters[omg3D2]>0 && deltaMap[omg3D2]==0){
             deltaMap[omg3D2Rotation] = macroMorphParameters[omg3D2Rotation];
             deltaMap[omg3D2Dist] = macroMorphParameters[omg3D2Dist];
-            deltaMap[omg3D2YDivergence] = macroMorphParameters[omg3D2YDivergence];
-            deltaMap[omg3D2Divergence] = macroMorphParameters[omg3D2Divergence];
+            deltaMap[yDivergence] = macroMorphParameters[yDivergence];
+            deltaMap[divergence] = macroMorphParameters[divergence];
             deltaMap[omg3D2Alpha0] = macroMorphParameters[omg3D2Alpha0];
             deltaMap[omg3D2Nb] = macroMorphParameters[omg3D2Nb];
         }
@@ -626,12 +629,11 @@ void eqkoscope::parseMacro(string path){
         if(macroMorphParameters[omg3D2]==0 && deltaMap[omg3D2]>0){
             macroMorphParameters[omg3D2Rotation] = deltaMap[omg3D2Rotation];
             macroMorphParameters[omg3D2Dist] = deltaMap[omg3D2Dist];
-            macroMorphParameters[omg3D2YDivergence] = deltaMap[omg3D2YDivergence];
-            macroMorphParameters[omg3D2Divergence] = deltaMap[omg3D2Divergence];
+            macroMorphParameters[yDivergence] = deltaMap[yDivergence];
+            macroMorphParameters[divergence] = deltaMap[divergence];
             macroMorphParameters[omg3D2Alpha0] = deltaMap[omg3D2Alpha0];
             macroMorphParameters[omg3D2Nb] = deltaMap[omg3D2Nb];
         }
-        
         
         if(macroMorphParameters[tintSaturation]>0 && deltaMap[tintSaturation]==0){
             deltaMap[tintHue] = macroMorphParameters[tintHue];
@@ -645,6 +647,8 @@ void eqkoscope::parseMacro(string path){
             macroMorphParameters[_invert] = deltaMap[_invert];
             macroMorphParameters[_gamma] = 1/macroMorphParameters[_gamma];
         }
+        
+        //media POs and rot
 
     }else{
     for(int i=0;i<N_PARAM;i++)
@@ -654,7 +658,9 @@ void eqkoscope::parseMacro(string path){
 }
 
 void eqkoscope::loadMacro(string path){
+    macroMutex.lock();
     pendingMacros.push_back(path);
+    macroMutex.unlock();
 }
 
 void eqkoscope::loadFirstMacro(){
@@ -669,21 +675,27 @@ void eqkoscope::reloadMacro(){
 }
 
 void eqkoscope::loadNextMacro(){
-    int c = currentMacroCode+1;
-    if(c>128*MAX_MACRO_PAGES)
-        c = 0;
-    setMacroCode(c);
-    string p = getMacroFromMIDI(currentMacroCode);
+    string p;
+    while(p.empty() && currentMacroCode<128*MAX_MACRO_PAGES){
+        int c = currentMacroCode+1;
+        if(c<0)
+            c = 128*MAX_MACRO_PAGES;
+        setMacroCode(c);
+        p = getMacroFromMIDI(currentMacroCode);
+    }
     if(!p.empty())
         loadMacro(p);
 }
 
 void eqkoscope::loadPrevMacro(){
-    int c = currentMacroCode-1;
-    if(c<0)
-        c = 128*MAX_MACRO_PAGES;
-    setMacroCode(c);
-    string p = getMacroFromMIDI(currentMacroCode);
+    string p;
+    while(p.empty() && currentMacroCode>=0){
+        int c = currentMacroCode-1;
+        if(c<0)
+            c = 128*MAX_MACRO_PAGES;
+        setMacroCode(c);
+        p = getMacroFromMIDI(currentMacroCode);
+    }
     if(!p.empty())
         loadMacro(p);
 }
@@ -694,7 +706,7 @@ string eqkoscope::getMacroFromMIDI(int pitch){
         if(macroMap[pitch].empty())
             return "";
         path << macroPath << macroMap[pitch] << ".xml";
-    }else
-        path << macroPath << "m" << pitch << ".xml";
+    }//else
+        //path << macroPath << "m" << pitch << ".xml";
     return path.str();
 }

@@ -12,13 +12,13 @@ using namespace std;
 
 static ofEasyCam cam;
 static ofMesh sphereMesh;
-static ofShader triumShader,alphaShader, skewShader, displaceShader, pixelShader, sobelShader, gBlurHor, hdrShader, sInvert, kShader, chromaShader,circleShader, displaceGlitchShader, lsdShader, perturbationShader;
-static ofFbo brightFbo;
+static ofShader triumShader,alphaShader, skewShader, displaceShader, pixelShader, noiseShader,sobelShader, gBlurHor, hdrShader, sInvert, kShader, chromaShader,circleShader, displaceGlitchShader, lsdShader, perturbationShader,dualShader;
+static ofFbo tunnelFbo;
 static ofImage iii;
 
 static AbstractApp* app;
 
-static std::vector<ofVec4f> zs;
+static std::vector<std::vector<ofVec4f> > zs;
 static std::vector<ofFbo*> zsFbos;
 static std::vector<bool> zsFbosOk;
 static int MAX_OMG3D2_FBOS = 25;
@@ -59,19 +59,27 @@ static void sphere(ofFbo* src, ofFbo* dest){
 }
 
 
+
+
 static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed, bool pastFbos,
-                          float rotation, float internalDist, bool symetry, bool freeRotation){
-    
+                          float rotation, float internalDist, bool symetry, bool freeRotation,
+                          float addedRotation, int o_index){
+
     ofEnableBlendMode(OF_BLENDMODE_ALPHA);
     
+    bool x2 = app->parameterMap[omg3D2x2];
     float nb = min((float)MAX_OMG3D2_FBOS, app->parameterMap[omg3D2Nb]);
+    if(x2)
+        nb /= 2;
+    nb = (int) nb;
     int MINDIST = 800;
     int MAXDIST = 4000*internalDist;
     
-    if(zs.size() != nb+1){ //init //TODO reset zs on macro load ?
-        zs.clear();
-        for(int x=0; x<=nb;x++){
-            zs.push_back(ofVec4f((x==0 || zs[x-1].x > 0) ? ofRandom(-WIDTH/4, 0) : ofRandom(0, WIDTH/4)
+    
+    if(zs[o_index].size() != (int) nb){ //init //TODO reset zs on macro load ?
+        zs[o_index].clear();
+        for(int x=0; x<nb;x++){
+            zs[o_index].push_back(ofVec4f((x==0 || zs[o_index][x-1].x > 0) ? ofRandom(-WIDTH/4, 0) : ofRandom(0, WIDTH/4)
                                  ,ofRandom(-WIDTH/4, WIDTH/4)
                                  , x/nb
                          ,(x%2)==0));
@@ -85,10 +93,14 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
         int firstIndex = 0;
         float maxZ = 0;
         
-        for(int x=0; x<zs.size();x++){ //updates
-            zs[x].z += speed;
+#ifdef REAL_TIME_FX
+        speed *= app->restrictFrameRate/ofGetFrameRate();
+#endif
+        
+        for(int x=0; x<zs[o_index].size();x++){ //updates
+            zs[o_index][x].z += speed;
             if(pastFbos){
-                if(zs[x].z<0 || zs[x].z>1){
+                if(zs[o_index][x].z<0 || zs[o_index][x].z>1){
                     zsFbos[x]->begin();
                     ofBackground(0);
                     ofSetColor(ofColor::white);
@@ -107,22 +119,22 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
             }
             
             bool reset = false;
-            if(zs[x].z<0){
-                zs[x].z = 1;
+            if(zs[o_index][x].z<0){
+                zs[o_index][x].z = 1;
                 reset = true;
             }
-            if(zs[x].z>1){
-                zs[x].z = 0 ;
+            if(zs[o_index][x].z>1){
+                zs[o_index][x].z = 0 ;
                 reset = true;
             }
             
             if(reset){
-                zs[x].x = (x==0 || zs[x-1].x > 0) ? ofRandom(-WIDTH/4, 0) : ofRandom(0, WIDTH/4);
-                zs[x].y = ofRandom(-WIDTH/4, WIDTH/4);
+                zs[o_index][x].x = (x==0 || zs[o_index][x-1].x > 0) ? ofRandom(-WIDTH/4, 0) : ofRandom(0, WIDTH/4);
+                zs[o_index][x].y = ofRandom(-WIDTH/4, WIDTH/4);
             }
             
-            if(zs[x].z > maxZ){
-                maxZ = zs[x].z;
+            if(zs[o_index][x].z > maxZ){
+                maxZ = zs[o_index][x].z;
                 firstIndex = x;
             }
         }
@@ -134,8 +146,9 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
         cam.setOrientation((ofVec3f((ofGetMouseY()-HEIGHT/2)/3.0, -(ofGetMouseX()-WIDTH/2)/3.0, 0)));
         cam.begin();
 #endif
-        ofBackground(0);
+//        ofBackground(0);
         ofTranslate(app->FINALWIDTH/2, HEIGHT2/2);
+        ofRotateY(addedRotation);
 #ifdef GAME
         //        ofSetColor(255,0,0,150);
         //        ofPushMatrix();
@@ -148,16 +161,22 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
         int i;
         float rot = 0;
         float intensity = app->parameterMap[omg3D2];
-        for (int index=0; index<zs.size();index++){
+        for (int index=0; index<zs[o_index].size();index++){
+            int iindex = index;
+            for(int add=0;add<= x2 ? 1 : 0;add++){
+            if(add==1)
+                iindex = zs[o_index].size() - index;
+            
             if(app->parameterMap[omg3D2ZScale]>=0)
-                i = (index + firstIndex) % zs.size();
-                else
-            i = zs.size() - 1 - ((index - firstIndex) % zs.size());
-            //            float addZres = max(1.0f, addZLen*(pow(2*abs(0.5f-zs[i].z),2)));
+                i = (iindex + firstIndex) % zs[o_index].size();
+            else
+                i = zs[o_index].size() - 1 - ((iindex - firstIndex) % zs[o_index].size());
             //            for(int xxxx=0;xxxx<addZLen;xxxx+=addZres){ //rotate img edges if z is close . check .vert
+            
             ofPushMatrix();
-            float x = zs[i].x * app->parameterMap[omg3D2Divergence] * 10;
-            float y = zs[i].y * app->parameterMap[omg3D2YDivergence] * 10;
+            {
+            float x = zs[o_index][i].x * app->parameterMap[divergence] * 10;
+            float y = zs[o_index][i].y * app->parameterMap[yDivergence] * 10;
 
             float ac = app->parameterMap[omg3D2AvoidCenter];
             if(ac>0 && abs(x)<ac*HEIGHT)
@@ -169,65 +188,70 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
             if(ac<0 && abs(y)>ac*HEIGHT)
                 y = -ac*HEIGHT * y/abs(y);
             
-            float z = (zs[i].z*(MINDIST + MAXDIST) - MAXDIST - MINDIST*(1-app->parameterMap[omg3D2Depth])) * intensity;
+            float z = zs[o_index][i].z;
+                if(add==1)
+                    z = 1 - z;
+             z = (z*(MINDIST + MAXDIST) - MAXDIST - MINDIST*(1-app->parameterMap[omg3D2Depth])) * intensity;
+                
+                
             if(app->parameterMap[omg3D2X]){
-                x +=  (zs[i].z-0.5)*WIDTH*nb/2.5*intensity;
-//                z = 0;
+                x +=  (zs[o_index][i].z-0.5)*WIDTH*nb/2.5*intensity;
             }
             if(app->parameterMap[omg3D2Y]){
-                y +=  (zs[i].z-0.5)*HEIGHT*nb/2.5*intensity;
-//                z = 0;
+                y +=  (zs[o_index][i].z-0.5)*HEIGHT*nb/2.5*intensity;
             }
 
-             ofTranslate(x, y, z);
+            ofTranslate(x, y, z);
             
             if(app->parameterMap[omg3D2RollerX] || app->parameterMap[omg3D2RollerY]){
-                float zzz = (0.8-zs[i].z);
+                float zzz = (0.8-zs[o_index][i].z);
                 zzz *= zzz;
                 ofTranslate(zzz*app->parameterMap[omg3D2RollerX]*HEIGHT,
                             zzz*app->parameterMap[omg3D2RollerY]*HEIGHT);
             }
             
             if(app->parameterMap[omg3D2HardRotation]==0)
-                rot = zs[i].z * rotation-1;
+                rot = zs[o_index][i].z * rotation-1;
             else
                 rot = rotation*i;
             if(freeRotation)
                 rot += ofGetFrameNum();
             ofRotateZ(rot);
+            ofTranslate(0, app->parameterMap[aDivergence]*HEIGHT/2);
             
             if(app->parameterMap[omg3D2ZScale]!=00)
-            ofScale(1+abs(app->parameterMap[omg3D2ZScale])*(1-zs[i].z),
-                    1+abs(app->parameterMap[omg3D2ZScale])*(1-zs[i].z));
+            ofScale(1+abs(app->parameterMap[omg3D2ZScale])*(1-zs[o_index][i].z),
+                    1+abs(app->parameterMap[omg3D2ZScale])*(1-zs[o_index][i].z));
             
             float alpha_ = 1;
             if(app->parameterMap[omg3D2Alpha0])
-                alpha_ *= ofMap(zs[i].z, 0.85, 0.92 + (0.08 * (1-app->parameterMap[omg3D2Depth])), 1, min(1.0f, max(0.0f, 1-app->parameterMap[omg3D2Alpha0])), true); //TODO add maxdist/mindist so that the algo is ok with different z scales
+                alpha_ *= ofMap(zs[o_index][i].z, 0.85, 0.92 + (0.08 * (1-app->parameterMap[omg3D2Depth])), 1, min(1.0f, max(0.0f, 1-app->parameterMap[omg3D2Alpha0])), true); //TODO add maxdist/mindist so that the algo is ok with different z scales
             float aaa = app->parameterMap[omg3D2AlphaZ];
             if(aaa)
-                alpha_ = alpha_*ofMap(zs[i].z, 0, 0.8, (1-aaa), 1, true);
+                alpha_ = alpha_*ofMap(zs[o_index][i].z, 0, 0.8, (1-aaa), 1, true);
             if(closeEasing)
-                alpha_ = alpha_*ofMap(zs[i].z, 0.2, 0, 1, 0, true);
+                alpha_ = alpha_*ofMap(zs[o_index][i].z, 0.2, 0, 1, 0, true);
             
             if(app->parameterMap[omg3D2LumaKey]){
                 alphaShader.begin();
                 alphaShader.setUniform1f("alphaOffset", alpha_);
                 if(app->parameterMap[omg3D2Strobe])
-                alphaShader.setUniform1f("invert", zs[i].w==1);
+                    alphaShader.setUniform1f("invert", zs[o_index][i].w==1);
             }
             ofSetColor(255*alpha_,255*alpha_,255,alpha_*255);//psychedelia !
             if(pastFbos){
                 zsFbos[i]->draw(-app->FINALWIDTH/2, -HEIGHT2/2 + (HEIGHT2-HEIGHT)/2);
             }else{
-                if((x<-1 && symetry) || (app->parameterMap[omg3D2Divergence]<=0.01 && symetry && i%2==0))
+                if((x<-1 && symetry) || (app->parameterMap[divergence]<=0.01 && symetry && i%2==0))
                     src->draw(-app->FINALWIDTH/2+app->FINALWIDTH, -HEIGHT2/2, -app->FINALWIDTH, HEIGHT2); //invert image
                 else
                     src->draw(-app->FINALWIDTH/2, -HEIGHT2/2);
             }
             if(app->parameterMap[omg3D2LumaKey])
-            alphaShader.end();
-            ofPopMatrix();
-            //            }
+                alphaShader.end();
+            }ofPopMatrix();
+                        }
+//        }
         }
         
         dest->end();
@@ -235,6 +259,40 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
     ofEnableBlendMode(OF_BLENDMODE_ALPHA);
 }
 
+static void tunnel(ofFbo* src, ofFbo* dest,  bool closeEasing, float speed, bool pastFbos,
+                   float rotation, float internalDist, bool symetry, bool freeRotation){
+    
+//    dualShader.load("../shaders/dual");
+
+    float a = -7;
+    
+    ofPushMatrix();
+//    ofRotateY(a);
+    displayOmg3D2(src, &tunnelFbo, closeEasing, speed, pastFbos, rotation, internalDist, symetry, freeRotation, a, 0);
+    ofPopMatrix();
+    
+    dest->begin();
+    dualShader.begin();
+    dualShader.setUniform1f("left", 1);
+    dualShader.setUniform1f("WIDTH", WIDTH);
+    tunnelFbo.draw(0,0);
+    dualShader.end();
+    dest->end();
+
+    ofPushMatrix();
+    ofRotateY(-a);
+    displayOmg3D2(src, &tunnelFbo, closeEasing, speed, pastFbos, rotation, internalDist, symetry, freeRotation, -a, 0);
+    ofPopMatrix();
+    
+    dest->begin();
+    dualShader.begin();
+    dualShader.setUniform1f("left", 0);
+    dualShader.setUniform1f("WIDTH", WIDTH);
+    tunnelFbo.draw(0,0);
+    dualShader.end();
+    dest->end();
+    
+}
 
 static void displayOmg3D(ofFbo* src, ofFbo* dest){
     ofEnableBlendMode(OF_BLENDMODE_SCREEN);
@@ -299,19 +357,30 @@ static void stripe(float size) {
 }
 
 static void doInvert(ofFbo* src, ofFbo* dest){
-//    sInvert.load("../shaders/invert");
+    //sInvert.load("../shaders/invert");
     dest->begin();
     sInvert.begin();
     sInvert.setUniform1f("WIDTH", WIDTH);
     sInvert.setUniform1f("HEIGHT", HEIGHT);
     sInvert.setUniform1f("circle", app->parameterMap[invertCircle] * (app->parameterMap[_invert] ? -1 : 1));
+    sInvert.setUniform1i("mode", 1);
+    src->draw(0,0);
+    sInvert.end();
+    dest->end();
+}
+
+static void doStrobe(ofFbo* src, ofFbo* dest){
+    //sInvert.load("../shaders/invert");
+    dest->begin();
+    sInvert.begin();
+    sInvert.setUniform1i("mode", app->parameterMap[strobe]);
     src->draw(0,0);
     sInvert.end();
     dest->end();
 }
 
 static void doPerturbation(ofFbo* src, ofFbo* dest){
-        perturbationShader.load("../shaders/perturbation");
+//   perturbationShader.load("../shaders/perturbation");
     dest->begin();
     perturbationShader.begin();
     perturbationShader.setUniform1f("WIDTH", WIDTH);
@@ -320,11 +389,13 @@ static void doPerturbation(ofFbo* src, ofFbo* dest){
     perturbationShader.setUniform1f("evolution", app->parameterMap[pertEvo]);
     perturbationShader.setUniform1f("freq", app->parameterMap[pertFreq]);
     perturbationShader.setUniform1f("persistance", app->parameterMap[pertPersistance]);
+    perturbationShader.setUniform1i("mode", (int) app->parameterMap[pertMode]);
     src->draw(0,0);
     perturbationShader.end();
     dest->end();
     
 }
+
 
 static void doLSD(ofFbo* src, ofFbo* dest){
     dest->begin();
@@ -372,9 +443,9 @@ static void pixellate(ofFbo* src, ofFbo* dest, float x, float y){
 
 static void sobelContours(ofFbo* src, ofFbo* dest){
     dest->begin();
-   // sobelShader.load("../shaders/sobel");
+//  sobelShader.load("../shaders/sobel");
     sobelShader.begin();
-    sobelShader.setUniform1i("fast", 1);
+//    sobelShader.setUniform1i("fast", 1);
     sobelShader.setUniform1f("intensity", app->parameterMap[sobel]);
     sobelShader.setUniform1f("mix_", app->parameterMap[sobelMix]);
     //    sobelShader.setUniform1i("hueLevels", ofGetMouseX()/10);
@@ -384,7 +455,7 @@ static void sobelContours(ofFbo* src, ofFbo* dest){
     dest->end();
 }
 
-static void chromaSeparation(ofFbo* src, ofFbo* dest, float chromaSep, float chromasepHue, float chromasepAngle, float chromaOffset, float tintAmp, float reTint, float sidesSaturation){
+static void chromaSeparation(ofFbo* src, ofFbo* dest, bool invert, float chromaSep, float chromasepHue, float chromasepAngle, float chromaOffset, float tintAmp, float reTint, float sidesSaturation){
 //        chromaShader.load("../shaders/chromaSep"); //dbg
     
     dest->begin();
@@ -405,6 +476,7 @@ static void chromaSeparation(ofFbo* src, ofFbo* dest, float chromaSep, float chr
     //chromaShader.setUniform1f("saturation", app->parameterMap[tintSaturation]*200 /255.0);
     chromaShader.setUniform1f("sidesSaturation", sidesSaturation);
     chromaShader.setUniform1f("reTint", app->parameterMap[_reTint]);
+//    chromaShader.setUniform1f("invert", invert);
     src->draw(0,0);
     chromaShader.end();
     dest->end();
@@ -473,12 +545,13 @@ static void doKalei(ofFbo* src, ofFbo* dest, float kaleiNb, float kaleiOffX, flo
     kShader.setUniform1f("copyBorder", (float )app->parameterMap[kaleiCopyBorder]);
     kShader.setUniform1f("mirror", (float )app->parameterMap[kaleiMirror]);
     kShader.setUniform1f("scale", (float )app->parameterMap[kaleiScale]);
+    kShader.setUniform1f("t", (float ) ofGetFrameNum());
     src->draw(0,0);
     kShader.end();
     dest->end();
 }
 
-static void doGlow(ofFbo* src, ofFbo* dest, ofFbo* tempFbo, float amount, float intensity, float resolution){
+static void doGlow(ofFbo* src, ofFbo* dest, ofFbo* tempFbo,  ofFbo* tempFbo2, float amount, float intensity, float resolution){
     //lag not in the shader but tempFbo writing
     //    tempFbo->clear();
     
@@ -496,7 +569,7 @@ static void doGlow(ofFbo* src, ofFbo* dest, ofFbo* tempFbo, float amount, float 
     gBlurHor.end();
     tempFbo->end();
     
-    src->begin(); //6IPS
+    tempFbo2->begin(); //6IPS
     ofSetColor(ofColor::black);
     ofRect(0,0,WIDTH,HEIGHT);
     ofSetColor(ofColor::white);
@@ -508,29 +581,40 @@ static void doGlow(ofFbo* src, ofFbo* dest, ofFbo* tempFbo, float amount, float 
     gBlurHor.setUniform1f("originalMix", 0);
     tempFbo->draw(0,0);
     gBlurHor.end();
-    src->end();
+    tempFbo2->end();
     
-    dest->begin();
-    ofSetColor(ofColor::black);
-    ofRect(0,0,WIDTH,HEIGHT);
-    ofSetColor(ofColor::white);
-    src->draw(0,0);
-    dest->end();
+//    dest->begin();
+//    ofSetColor(ofColor::black);
+//    ofRect(0,0,WIDTH,HEIGHT);
+//    ofSetColor(ofColor::white);
+//    tempFbo2->draw(0,0);
+//    dest->end();
 }
 
-static void randHide(ofFbo* src, ofFbo* dest, bool vertical){
+static void randHide(ofFbo* src, ofFbo* dest){
     dest->begin();
     src->draw(0,0);
-    if(vertical){
+    float vv = app->parameterMap[randVHide];
+    float hh = app->parameterMap[randHHide];
+    ofSetColor(ofColor::black);
+    if(vv>0 && hh >0){
         float y = ofRandom(HEIGHT2);
-        float h = ofRandom(HEIGHT/4);
-        ofSetColor(ofColor::black);
+        float h = ofRandom(HEIGHT/4*vv);
+        float x = ofRandom(WIDTH);
+        float w = ofRandom(WIDTH/4*hh);
+        ofRect(0, 0, x, y);
+        ofRect(x+w, 0, WIDTH, y);
+        ofRect(0, y+h, x, HEIGHT);
+        ofRect(x+w, y+h, WIDTH, HEIGHT2);
+    }else
+    if(vv>0){
+        float y = ofRandom(HEIGHT2);
+        float h = ofRandom(HEIGHT/4*vv);
         ofRect(0, 0, WIDTH, y);
         ofRect(0, y+h, WIDTH, HEIGHT2);
     }else{
         float x = ofRandom(WIDTH);
-        float w = ofRandom(WIDTH/4);
-        ofSetColor(ofColor::black);
+        float w = ofRandom(WIDTH/4*hh);
         ofRect(0, 0, x, HEIGHT2);
         ofRect(x+w, 0, WIDTH, HEIGHT2);
     }
@@ -602,7 +686,6 @@ static void updateSkew(float jumpRate, bool hard,
         off = skewVector[i];
         if (ofRandom(1)<jumpRate)
             off = 0;
-        cout << skewVector[i] << endl;
     }
 }
 
@@ -639,7 +722,7 @@ static void skew(ofFbo* src, ofFbo* dest, float intensity, float offset, int mod
 
 /***************************** DISPLACE **/
 
-static float displaceVector[WIDTH];
+static float* displaceVector;
 static float* getDisplaceVector(){
     return displaceVector;
 }
@@ -654,10 +737,24 @@ static void updateDisplace(float prob) {
     }
 }
 
+static void doNoise(ofFbo* src, ofFbo* dest){
+//    noiseShader.load("../shaders/noise");
+
+    dest->begin();
+    noiseShader.begin();
+    noiseShader.setUniform1f("intensity", app->parameterMap[noise]);
+    noiseShader.setUniform1f("seed", ofGetFrameNum());
+    src->draw(0,0);
+    noiseShader.end();
+    dest->end();
+}
+
 static void displace(ofFbo* src, ofFbo* dest, float intensity, float displaceProba, bool vertical){
     dest->begin();
     updateDisplace(displaceProba);
     displaceShader.begin();
+    displaceShader.setUniform1i("WIDTH", WIDTH);
+    displaceShader.setUniform1i("HEIGHT", HEIGHT);
     displaceShader.setUniform1f("vertical", vertical?1:0);
     displaceShader.setUniform1f("intensity", intensity);
     displaceShader.setUniform1fv("displace", getDisplaceVector(), WIDTH);
@@ -667,7 +764,7 @@ static void displace(ofFbo* src, ofFbo* dest, float intensity, float displacePro
 }
 
 static void displaceGlitch(ofFbo* src, ofFbo* dest, float intensity, float displaceProba, bool vertical){
-    displaceGlitchShader.load("../shaders/displaceGlitch");
+//    displaceGlitchShader.load("../shaders/displaceGlitch");
     int n =10;
     for(int i=0;i<n;i++){
         dest->begin();
@@ -1008,7 +1105,43 @@ static void sortPixels(ofImage *img){
             img->setColor(x,y,p[x+y*img->width]);
 }
 
-static void initGlitches(AbstractApp* a, float* skewVector){
+static void loadFXShaders(){
+    alphaShader.load("../shaders/alpha");
+    skewShader.load("../shaders/skew");
+    skewShader.load("../shaders_circle/skew");
+    displaceShader.load("../shaders/displace");
+    displaceShader.load("../shaders_circle/displace");
+    noiseShader.load("../shaders/noise");
+    pixelShader.load("../shaders/pixellate");
+    pixelShader.load("../shaders_circle/pixellate");
+    sobelShader.load("../shaders/sobel");
+    sobelShader.load("../shaders_circle/sobel");
+    gBlurHor.load("../shaders/gblurHD");
+    hdrShader.load("../shaders/gamma");
+    sInvert.load("../shaders/invert");
+    kShader.load("../shaders/kalei");
+    kShader.load("../shaders_circle/kalei");
+    chromaShader.load("../shaders/chromaSep");
+    circleShader.load("../shaders/circle");
+    displaceGlitchShader.load("../shaders/displaceGlitch");
+    lsdShader.load("../shaders/lsd");
+    triumShader.load("../shaders/trium");
+    perturbationShader.load("../shaders/perturbation");
+    dualShader.load("../shaders/dual");
+
+}
+
+static float* skewVector;
+static void updateResolution(){
+    /** DATA VECTORS **/
+    free(skewVector);
+    skewVector = (float*) malloc(app->crt_WIDTH*sizeof(float));
+    
+    free(displaceVector);
+    displaceVector = (float*) malloc(app->crt_WIDTH*sizeof(float));
+}
+
+static void initGlitches(AbstractApp* a){
     app = a;
     
     sphereMesh = ofMesh::sphere(HEIGHT/2.25, 100);
@@ -1026,34 +1159,31 @@ static void initGlitches(AbstractApp* a, float* skewVector){
         sphereMesh.setVertex(i, v);
     }
     
-    alphaShader.load("../shaders/alpha");
-    skewShader.load("../shaders/skew");
-    displaceShader.load("../shaders/displace");
-    pixelShader.load("../shaders/pixellate");
-    sobelShader.load("../shaders/sobel");
-    gBlurHor.load("../shaders/gblurHD");
-    hdrShader.load("../shaders/gamma");
-    sInvert.load("../shaders/invert");
-    kShader.load("../shaders/kalei");
-    chromaShader.load("../shaders/chromaSep");
-    circleShader.load("../shaders/circle");
-    displaceGlitchShader.load("../shaders/displaceGlitch");
-    lsdShader.load("../shaders/lsd");
-    triumShader.load("../shaders/trium");
-    perturbationShader.load("../shaders/perturbation");
+    loadFXShaders();
     
-    brightFbo.allocate(WIDTH,HEIGHT2);
+    tunnelFbo.allocate(WIDTH,HEIGHT2);
     iii.allocate(WIDTH, HEIGHT, OF_IMAGE_COLOR_ALPHA);
     
     sortImage.allocate(WIDTH, HEIGHT, OF_IMAGE_COLOR_ALPHA);
     
-    updateSkew(skewVector);
-    
+
     for(int i=0;i<MAX_OMG3D2_FBOS;i++){
         ofFbo* fbo = new ofFbo;
         fbo->allocate(WIDTH, HEIGHT);
         zsFbos.push_back(fbo);
     }
+    
+    
+    /** DATA VECTORS **/
+    updateResolution();
+    updateSkew(skewVector);
+    
+    for(int i=0;i<2;i++){
+        std::vector<ofVec4f> z;
+        zs.push_back(z);
+    }
 }
+
+
 
 #endif

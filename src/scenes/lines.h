@@ -28,17 +28,26 @@ public:
     }
     
     void draw(){
-        ofTranslate(0,-(HEIGHT2-HEIGHT)/2);
+        ofTranslate(WIDTH/2,HEIGHT/2-(HEIGHT2-HEIGHT)/2);
+        
         ofSetColor(ofColor::black);
-        ofRect(0,0,WIDTH,HEIGHT2);
+        ofRect(-WIDTH,-HEIGHT,WIDTH*2,HEIGHT*2);
         ofSetColor(ofColor::white);
+        
+        ofTranslate(app->parameterMap[mediaX]*WIDTH, -app->parameterMap[mediaY]*HEIGHT, app->parameterMap[mediaZ]*HEIGHT);
+        ofRotateX(app->parameterMap[mediaRotX]);
+        ofRotateY(app->parameterMap[mediaRotY]);
+        ofRotateZ(app->parameterMap[mediaRotZ]);
+        
+
         float angle = 0;
         int mm = 1+app->parameterMap[lines_ySquare];
         mm = mm==0 ? 1 : mm;
         int yres = int((1+app->parameterMap[lines_yres]*HEIGHT2/10)/mm)*mm;
         int xres = max(1,int(20/mm)*mm);
         
-        for(int y=yres/2-HEIGHT;y<HEIGHT+HEIGHT;y+=yres){
+        int hh = HEIGHT*(1-app->parameterMap[user1]);
+        for(int y=yres/2-hh+HEIGHT/2;y<hh+HEIGHT/2;y+=yres){
             ofPolyline b;
             ofMesh mesh;
             mesh.setMode(OF_PRIMITIVE_LINE_STRIP);
@@ -59,9 +68,9 @@ public:
                 mm = 1+app->parameterMap[lines_zSquare]*HEIGHT2;
                 float zz = -int((az*HEIGHT2) / mm) * mm;
                 if(app->parameterMap[lines_mesh])
-                mesh.addVertex(ofVec3f(xx,yy,zz));
+                mesh.addVertex(ofVec3f(xx-WIDTH/2,yy-HEIGHT/2,zz));
                 else
-                                    b.lineTo(xx, yy, zz);
+                                    b.lineTo(xx-WIDTH/2, yy-HEIGHT/2, zz);
             }
             
             int count = 1 + (y%7)*app->parameterMap[shapeWeight] / 7.0;
@@ -101,10 +110,12 @@ public:
         attractors[index] = ofVec4f(x, y, ofRandom(-1,1), ofRandom(1));
     }
     
-    void mouseDragged(int x, int y, int button){
+    void mousePressed(int x, int y, int button){}
+        void mouseDragged(int x, int y, int button){
         
     }
-    
+    void mouseMoved(int x, int y){}
+
     void touchMoved(ofTouchEventArgs &touch){
         
     }
@@ -175,6 +186,16 @@ public:
     }
     
     bool isBackground(){return back;}
+    
+    void setResolution(int r){
+        //reset the attractors
+        attractors.clear();
+        for(int i=0;i<50;i++){
+            attractors.push_back(ofVec4f(ofRandom(WIDTH),
+                                         ofRandom(HEIGHT+app->parameterMap[updateLen]*2)-app->parameterMap[updateLen],
+                                         ofRandom(-1,1), ofRandom(0,1)));
+        }
+    }
     
     protected :
     vector<ofVec4f> attractors;

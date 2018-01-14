@@ -118,8 +118,10 @@ public:
     }
     
     void capture(ofFbo* fbo){}
+    void mousePressed(int x, int y, int button){}
     void mouseDragged(int x, int y, int button){}
-    void touchMoved(ofTouchEventArgs &touch){}
+    void mouseMoved(int x, int y){}
+ void touchMoved(ofTouchEventArgs &touch){}
     
     void midiEvent(ofxMidiMessage& eventArgs){
         float value = eventArgs.value;

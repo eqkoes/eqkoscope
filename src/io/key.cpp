@@ -1,5 +1,4 @@
 #include "eqkoscope.h"
-bool isCmdModifier = false;
 
 ofxMidiMessage createMessage(int pitch){
     ofxMidiMessage eventArgs;
@@ -31,6 +30,8 @@ void eqkoscope::keyReleased(int key){
     switch(key){
         case 4352: isCmdModifier = false;
             break;
+        case 1280: isAltModifier = false;
+            break;
         default:;
     }
 }
@@ -38,13 +39,31 @@ void eqkoscope::keyReleased(int key){
 void eqkoscope::keyPressed(int key){
     logfile << ofGetElapsedTimeMillis() << " KeyPressed " << key << endl;
     
-    if(isCmdModifier){
-        if(key=='s')
-            saveCurrentMacro();
+    if(key==210){
+        saveMacroTC = false;
+        saveCurrentMacro();
+        saveMacroTC = true;
         return;
     }
     
+    if(isCmdModifier){
+        if(key=='s'){
+            saveMacroTC = !isAltModifier;
+            saveCurrentMacro();
+            saveMacroTC = true;
+            return;
+        }
+        if(key=='p'){
+            stringstream str;
+            str << "open " << + "/Users/Raph/Dev/of_v0.8.4_osx_release/apps/myApps/Feedback/bin/data/" << uzi->getCurrentMedia().c_str();
+            cout << "CMD " << str.str() << endl;
+            ofSystem(str.str());
+            return;
+        }
+    }
+    
     if(isPrompt) {
+        
         if(key==2304 || key==2305 || key==2306) //shift
             return;
         if(key==OF_KEY_BACKSPACE){
@@ -64,7 +83,7 @@ void eqkoscope::keyPressed(int key){
             return;
         }
         
-        if(key==OF_KEY_RETURN || key==' '){
+        if(key==OF_KEY_RETURN){
             if(!promptStr.compare("")){
                 isPrompt = false;
                 return;
@@ -108,6 +127,8 @@ void eqkoscope::keyPressed(int key){
                         addCommand(promptValue, false);
                     if(!promptStr.compare("moviePos"))
                         cinema->setPosition( ofToFloat(promptValue));
+                    if(!promptStr.compare("HD"))
+                        setResolution(ofToInt(promptValue));
                 }
             }
         }else{
@@ -215,6 +236,12 @@ void eqkoscope::keyPressed(int key){
     }
     
     switch(key){
+#ifdef GENETIC
+            case 'e':
+            genetic->eval(ofGetMouseX()/float(WIDTH));
+            break;
+#endif
+            
         case '@': reset();
             break;
         case '&': displayFrameRate = !displayFrameRate;
@@ -233,7 +260,6 @@ void eqkoscope::keyPressed(int key){
         case ':':
             parameterMap[antiAliasing] = !parameterMap[antiAliasing];
             break;
-        case '-':loadSoloScene(glitch); break;
         case '$':saveFrame = true;break;
         case '_':updateSkew(skewVector);break;
         case 'm':resetMidi(); break;
@@ -256,6 +282,9 @@ void eqkoscope::keyPressed(int key){
                         cinemas[c]->pause(pause);
                 }
             }
+            if(pause)
+                if(strip!=0)
+                    strip->closeSerial();
         }break;
             //        case 'i':parameterMap[invert] = !parameterMap[invert]; break;
         case 'a': if(!safeMode) {parameterMap[audio] = !parameterMap[audio];
@@ -272,16 +301,27 @@ void eqkoscope::keyPressed(int key){
         case 's':yOffsetDelta+=5; break;
         case 'w':trapeze-=0.05;break;
         case 'x':trapeze+=0.05;break;
-        case 'R' :         randomParameters();break;
+        case 'R' :         niceRandom(0);break;
+        case 'T' :         niceRandom(1);break;
+        case 'Y' :         niceRandom(2);break;
         case 'r': if(!safeMode){saveMacros = !saveMacros;
             if(saveMacros)
                 saveMacroStr = macroPath;
         }break;
+        case '(':deltaMap[strobe] = !deltaMap[strobe]; break;
+        case ')':deltaMap[_invert] = !deltaMap[_invert]; break;
+        case '-':{deltaMap[omg3D2Speed] = min(max(deltaMap[omg3D2Speed]+0.003, -0.03), 0.03);  }break;
+//        case '_':{deltaMap[omg3D2Speed] = min(max(deltaMap[omg3D2Speed]-0.003, -0.03), 0.03);  }break;
+        case '7':deltaMap[omg3D2Speed] = -0.06; break;
+        case '8':deltaMap[omg3D2Speed] = 0.06; break;
         case 'y':loadSoloScene(drawscene); break;
         case 356:  posX += 20; break;
         case 358: posX -= 20;break;
         case 357: posY += 20;  break;
         case 359:  posY -= 20; break;
+        case '!' :{ if(dualDisplay)
+            ofSetWindowPosition(-FINALWIDTH, 0);
+        } break;
             
             //MPD
         case 'W':{
@@ -351,6 +391,9 @@ void eqkoscope::keyPressed(int key){
         }break;
         case 4352: isCmdModifier = true;
             break;
+        case 1280: isAltModifier = true;
+            break;
+        case 167: loadShaders();break;
     }
     if(scenes[parameterMap[currentScene]]!=0)
         scenes[parameterMap[currentScene]]->keyPressed(key);

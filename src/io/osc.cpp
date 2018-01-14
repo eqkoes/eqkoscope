@@ -2,28 +2,78 @@
 #define eqkoscope_ofApp_OSC_h
 
 #include "eqkoscope.h"
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 void eqkoscope::initOSC(){
     receiver.setup(5555);
-//    sender.setup("127.0.0.1", 6666);
+    
+    //get my IP address
+    struct ifaddrs * ifAddrStruct=NULL;
+    struct ifaddrs * ifa=NULL;
+    void * tmpAddrPtr=NULL;
+    getifaddrs(&ifAddrStruct);
+    string myIP = "";
+    for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr)
+            continue;
+        if (ifa->ifa_addr->sa_family == AF_INET) { // check it is IP4
+            tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+            char addressBuffer[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+            //            printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer);
+            string ip = addressBuffer;
+            if(strStartsWith(ip, "192.")){
+                myIP = ip;
+                break;
+            }
+        }
+        //        else if (ifa->ifa_addr->sa_family == AF_INET6) { // check it is IP6
+        //            // is a valid IP6 Address
+        //            tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+        //            char addressBuffer[INET6_ADDRSTRLEN];
+        //            inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
+        //            printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer);
+        //        }
+    }
+    if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
+    
+    if(myIP.compare("")){
+        string mask = myIP;
+        int i = mask.find_last_not_of(".");
+        mask.replace(i, mask.length()-i, "255");
+        if(i>0){
+            sender.setup(mask, 6666); //broadcast
+            oscout("/Ping", myIP);
+        }
+    }else{ //if no remote interface, use local network
+        myIP = "127.0.0.1";
+        sender.setup(myIP, 6666); //broadcast
+        oscout("/Ping", myIP);
+    }
 }
 
 bool eqkoscope::manageOSCParam(ofxOscMessage* m){
     bool ret = false;
     vector<string> elts = ofSplitString(m->getAddress(), ",");
     for(int i=0;i<elts.size();i++){
-    if(parameterNameMap.count(elts[i])){
-        int id = parameterNameMap[elts[i]];
-        deltaMap[id] = parameterMap[id] = m->getArgAsFloat(i);
-        ret = true;
-    }
+        if(parameterNameMap.count(elts[i])){
+            int id = parameterNameMap[elts[i]];
+            deltaMap[id] = parameterMap[id] = m->getArgAsFloat(i);
+            ret = true;
+        }
     }
     return ret;
 }
 
 bool recordTablet = true;
 void eqkoscope::manageOSC(){
-    while(receiver.hasWaitingMessages()){
+    int count = 0;
+    int maxCount = 100;
+    
+    while(receiver.hasWaitingMessages() && (++count<maxCount)){
         ofxOscMessage m;
         receiver.getNextMessage(&m);
         
@@ -31,6 +81,39 @@ void eqkoscope::manageOSC(){
             sender.setup(m.getRemoteIp(), 6666);
             oscout("/Ping", 1);
             oscout("/Macros/Names", macroNames, 8*16);
+            continue;
+        }
+        
+        if(!m.getAddress().compare("/MIDI/NoteOn") && m.getNumArgs()==3){
+            ofxMidiMessage evt;
+            evt.portNum = -2;
+            evt.status = m.getArgAsInt32(1)>0 ? MIDI_NOTE_ON : MIDI_NOTE_OFF;
+            evt.pitch = m.getArgAsInt32(0);
+            evt.velocity = m.getArgAsInt32(1);
+            evt.channel = m.getArgAsInt32(2);
+            cout << "NOTE ON " << ofGetFrameNum() << " " << evt.channel <<  "" << evt.pitch  <<  endl;
+            newMidiMessage(evt);
+            continue;
+        }
+        if(!m.getAddress().compare("/MIDI/CC") && m.getNumArgs()==3){
+            ofxMidiMessage evt;
+            evt.portNum = -2;
+            evt.status = MIDI_CONTROL_CHANGE;
+            evt.control = m.getArgAsInt32(0);
+            evt.value = m.getArgAsInt32(1);
+            evt.channel = m.getArgAsInt32(2);
+            newMidiMessage(evt);
+            continue;
+        }
+        
+        if(!m.getAddress().compare("/MIDI/Audio") && m.getNumArgs()==2){
+            //            cout << "audio msg count " << count << endl;
+            audioOverOSC = true;
+            ofxMidiMessage evt;
+            float gain = pow(10, (parameterMap[audioGain])/20.0);
+            if(m.getArgAsInt32(1)<10){
+                currentRms[int(m.getArgAsInt32(1))] = m.getArgAsFloat(0)*gain;
+            }
             continue;
         }
         
@@ -47,7 +130,7 @@ void eqkoscope::manageOSC(){
         if(m.getNumArgs()==2 && strStartsWith(m.getAddress(), "/Draw")){
             if(recordTablet)
                 drawscene->recordPoint(m.getArgAsFloat(0)*WIDTH, m.getArgAsFloat(1)*HEIGHT, 0, ofColor::white);
-                drawscene->moveCursor(m.getArgAsFloat(0)*WIDTH, m.getArgAsFloat(1)*HEIGHT);
+            drawscene->moveCursor(m.getArgAsFloat(0)*WIDTH, m.getArgAsFloat(1)*HEIGHT);
             continue;
         }
         
@@ -56,9 +139,9 @@ void eqkoscope::manageOSC(){
             continue;
         }
         
-//        if(!m.getAddress().compare("/Gpad/L")){
-//            cout << m.getArgAsFloat(0) << endl;
-//        }
+        //        if(!m.getAddress().compare("/Gpad/L")){
+        //            cout << m.getArgAsFloat(0) << endl;
+        //        }
         
         bool found = false;
         for(Auto* a: oscAutos)
@@ -98,7 +181,7 @@ void eqkoscope::manageOSC(){
             continue;
         }
         cout << ofGetElapsedTimeMicros() - s << "(elapsed osc)" << endl;
-      }
+    }
 }
 
 
@@ -109,11 +192,18 @@ void eqkoscope::oscout(std::string head, float value){
     sender.sendMessage(msg);
 }
 
+void eqkoscope::oscout(std::string head, std::string value){
+    ofxOscMessage msg;
+    msg.setAddress(head);
+    msg.addStringArg(value);
+    sender.sendMessage(msg);
+}
+
 void eqkoscope::oscout(std::string head, vector<float> values){
     ofxOscMessage msg;
     msg.setAddress(head);
     for(float value : values)
-    msg.addFloatArg(value);
+        msg.addFloatArg(value);
     sender.sendMessage(msg);
 }
 

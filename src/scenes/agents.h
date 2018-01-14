@@ -66,8 +66,11 @@ public:
              agents[i].update();
          }
      }
-    
+    void mousePressed(int x, int y, int button){}
+
      void mouseDragged(int x, int y, int button){}
+    void mouseMoved(int x, int y){}
+
      void touchMoved(ofTouchEventArgs &touch){}
      void keyPressed(int key){}
     

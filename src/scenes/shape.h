@@ -20,7 +20,7 @@
 #include <cstdlib>
 #include <complex>
 
-#define POLY 0
+#define POLYSHAPE 0
 #define LINES 1
 
 using namespace std;
@@ -63,7 +63,7 @@ public:
         
         /*ofTranslate(0,0,-z);
         switch(renderMode){
-            case POLY:{
+            case POLYSHAPE:{
                 ofSetPolyMode(OF_POLY_WINDING_NONZERO);
                 ofBeginShape();
                 ofSetColor(ofColor::white);
@@ -136,7 +136,8 @@ public:
     }
     
     
-    void mouseDragged(int x, int y, int button){
+    void mousePressed(int x, int y, int button){}
+  void mouseDragged(int x, int y, int button){
         pts.push_back(ofVec3f(x,y, z-100));
         
     }

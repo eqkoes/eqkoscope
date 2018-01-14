@@ -3,7 +3,7 @@
 
 #include "eqkoscope.h"
 
-void eqkoscope::initParameters(){
+void AbstractApp::initParameters(){
     parameterMap[post_traitement] = 1;
     parameterMap[omg3D] = false;
     parameterMap[omg3DAngle] = 60;
@@ -12,6 +12,7 @@ void eqkoscope::initParameters(){
     parameterMap[test3] = false;
     parameterMap[omg3D2] = 0;
     parameterMap[omg3D2Dist] = 0.5;
+    parameterMap[omg3D2x2] = 0;
     parameterMap[omg3D2X] = 0;
     parameterMap[omg3D2Y] = 0;
     parameterMap[omg3D2Alpha0] = 1;
@@ -20,11 +21,12 @@ void eqkoscope::initParameters(){
     parameterMap[omg3D2RollerY] = 0;
     parameterMap[omg3D2Symetry] = false;
     parameterMap[omg3D2Rotation] = 0;
-    parameterMap[omg3D2Divergence] = 0;
-    parameterMap[omg3D2YDivergence] = 0;
+    parameterMap[divergence] = 0;
+    parameterMap[yDivergence] = 0;
     parameterMap[omg3D2Speed] = 0.005;
     parameterMap[omg3D2FreeRotation] = false;
     parameterMap[omg3D2AvoidCenter] = 0;
+    parameterMap[aDivergence] = 0;
     parameterMap[omg3D2Scale] = 0;
     parameterMap[omg3D2Strobe] = 0;
     parameterMap[omg3D2Depth] = 1;
@@ -62,7 +64,6 @@ void eqkoscope::initParameters(){
     parameterMap[toCircle] = 0;
     parameterMap[lineDa] = 0.75;
     parameterMap[lineDx] = 0;
-    parameterMap[blendType] = MULTIPLY;
     parameterMap[flash] = false;
     parameterMap[triumMode] = 0; //-1 : dual
     parameterMap[triumSpace1] = 0;
@@ -87,7 +88,6 @@ void eqkoscope::initParameters(){
     parameterMap[tintSaturation]=1;
     parameterMap[tintHue]=0;
     parameterMap[tintBrightness] = 1;
-    parameterMap[black] = false;
     parameterMap[tintCenter]=0;
     parameterMap[tintAmp] = 1;
     parameterMap[sidesSaturation] = 0.8;
@@ -153,7 +153,7 @@ void eqkoscope::initParameters(){
     parameterMap[skewBandingProb] = 0.025;
     parameterMap[skewBandingJumpProb] = 0.25;
     
-    parameterMap[omg3D2HardRotation] = 1;
+    parameterMap[omg3D2HardRotation] = 0;
     parameterMap[omg3D2Nb] = 15;
     
     parameterMap[kaleiCopy]=0;
@@ -166,7 +166,7 @@ void eqkoscope::initParameters(){
     parameterMap[stressTest] = 0;
     parameterMap[stressTestRate] = 1;
     
-    parameterMap[reSaturate] = 1;
+    parameterMap[reSaturate] = 0;
     
     parameterMap[prollage] = 0.02;
     
@@ -179,7 +179,8 @@ void eqkoscope::initParameters(){
     parameterMap[hueShiftCenter] = 0;
     parameterMap[hueShiftRange] = 0.1;
     parameterMap[hueShiftCrazy] = 0;
-    
+    parameterMap[hueKalei] = 0.;
+
     parameterMap[kaleiMirror] = 0;
     
     parameterMap[omg3D2ZScale] = 0;
@@ -287,8 +288,7 @@ void eqkoscope::initParameters(){
     parameterMap[circleRotation] = 1;
     parameterMap[circleDist] = 1;
     parameterMap[z] = 1;
-    parameterMap[postT] = true;
-    parameterMap[blendType] = TRUED;
+    parameterMap[blendType] = ALPHABLACK;
     parameterMap[feedback] = false;
     parameterMap[randomSpeed] = 0;
     parameterMap[selectedPlayer] = 0;
@@ -301,14 +301,14 @@ void eqkoscope::initParameters(){
     parameterMap[nextImg] = false;
     parameterMap[doubleInversion] = false;
     parameterMap[backMask] = false;
-    parameterMap[roundMask] = false;
+    parameterMap[_mask] = false;
     parameterMap[resize] = true;
-    parameterMap[kenBurns] = 0;
-    parameterMap[kenBurnsZ_end] = 1;
-    parameterMap[kenBurnsZ] = 0.0;
-    parameterMap[kenBurnsZ_pos] = 0;
-    parameterMap[kenBurnsZ_min] = 1.;
-    parameterMap[kenBurnsZ_max] = 1.5;
+//    parameterMap[kenBurns] = 0;
+//    parameterMap[kenBurnsZ_end] = 1;
+//    parameterMap[kenBurnsZ] = 0.0;
+//    parameterMap[kenBurnsZ_pos] = 0;
+//    parameterMap[kenBurnsZ_min] = 1.;
+//    parameterMap[kenBurnsZ_max] = 1.5;
     parameterMap[autoRot] = 0;
     parameterMap[autoRotFreq] = 1;
     parameterMap[ak47Mode] = false;
@@ -340,7 +340,7 @@ void eqkoscope::initParameters(){
     parameterMap[draw_oz] = 0;
     parameterMap[draw_zSpeed] = 0;
     
-    parameterMap[draw_rotY] = 0;
+    parameterMap[bw] = 0;
     parameterMap[draw_freskSpeed] = 1;
     
     parameterMap[draw_consecutive] = 0;
@@ -362,12 +362,13 @@ void eqkoscope::initParameters(){
     
     /** MAPPED **/
      parameterMap[map_event] = 1;
-     parameterMap[map_remanence] = 0;
-     parameterMap[map_mode] = BLINK;
+     parameterMap[map_remanence] = 0.67;
+     parameterMap[map_mode] = 200;
      parameterMap[map_sync]  = SYNC_INDIV;
-     parameterMap[map_pace]  = 0.05;
+     parameterMap[map_pace]  = 0.005;
      parameterMap[map_prog]  = 0;
-    
+     parameterMap[map_mask] = false;
+ 
     /** KINECT **/
     parameterMap[kinect] = 0;
     parameterMap[kinectScale] = 1;
@@ -385,13 +386,17 @@ void eqkoscope::initParameters(){
     parameterMap[echoAdjust] = 1;
     
     /** LED **/
-    parameterMap[ledMode]=12;
+    parameterMap[ledMode]=0;
     parameterMap[ledSync]=0;
     parameterMap[ledPeriod]=1000/restrictFrameRate;
     parameterMap[ledInfo]=0;
-    parameterMap[ledBrightness]=0.25;
+    parameterMap[ledBrightness]=0.0;
     parameterMap[ledEvent] = 0;
-    parameterMap[ledTint] = -1;
+    parameterMap[ledTint] = 180;
+    parameterMap[ledSaturation] = 255;
+    parameterMap[ledStrobe] = 0;
+    parameterMap[ledAuto] = 0;
+    parameterMap[uvLight] = 0;
     
     /** USER **/
     parameterMap[user1] = 0;
@@ -403,19 +408,114 @@ void eqkoscope::initParameters(){
     /** PERTURBATION **/
     parameterMap[pert] = 0;
     parameterMap[pertEvo] = 0;
+    parameterMap[pertEvoAuto] = 0;
     parameterMap[pertPersistance] = .5;
     parameterMap[pertFreq] = 10;
+    parameterMap[pertMode] = 0;
     
     parameterMap[glitchFreq] = 45;
+    
+    parameterMap[fadeOutMode] = 1;
+    
+    parameterMap[useJoyStick] = 0;
+    
+    parameterMap[noise] = 0;
+    
+    parameterMap[mandala] = 0;
+    parameterMap[squareMandala] = 0;
+    
+    parameterMap[hueFilter] = 0;
+    parameterMap[psyShift] = 0;
+    
+    parameterMap[bypassCTRL] = 0;
+   
+    parameterMap[whitePoint] = 1;
+    parameterMap[blackPoint] = 0;
+
+    
+    for(int i=0;i<N_PARAM;i++)
+        deltaMap[i] = parameterMap[i];
     }
 
-void eqkoscope::randomParameters(){
-    for(int p=0;p<=parameterNameMap.size();p++){
+void AbstractApp::randomParameters(){
+    initParameters();
+    for(int p=0;p<=N_PARAM;p++){
+        if(std::find(stressTestFilterList.begin(), stressTestFilterList.end(),p)==stressTestFilterList.end()){
         float v = 0;
-        if(ofRandom(1)<0.05)
-            v = ofRandom(1);
+            if(ofRandom(1)<0.10){
+                if(p==_gamma || p==tintSaturation)
+                    v = 1+ofRandom(-0.5,0.5);
+                else
+                    v = ofRandom(1);
+            }
         deltaMap[p] = parameterMap[p] = v;
+        }
     }
+    deltaMap[_gamma] = parameterMap[_gamma] = 1;
 }
+
+//void AbstractApp::niceRandom(int x){
+//    if(scenes[0]==cinema){
+//        cinema->randomJump();
+//    }
+//    
+//    switch(x){
+//        case 0:{ // tunnel
+//            deltaMap[omg3D2] = 1;
+//            deltaMap[omg3D2Dist] = ofRandom(0.5,1);
+//            deltaMap[omg3D2Rotation] = 45*(int) ofRandom(0,12);
+//            deltaMap[omg3D2HardRotation] = 1;
+//            deltaMap[kalei] = (int) ofRandom(0,2);
+//            deltaMap[kaleiNb] = (int) ofRandom(0,5);
+//            
+//            deltaMap[pert] = 0;
+//            deltaMap[skewAmp] = 0;
+//            deltaMap[_reTint] = 0;
+//            deltaMap[tintSaturation] = 1;
+//            deltaMap[displaceAmp] = 0;
+//            deltaMap[sobel]  = 0;
+//            deltaMap[hueShift] = 0;
+//            
+//            
+//        }break;
+//        case 1:{ //liquid
+////            deltaMap[_invert] = ofRandom(0, 1) < 0.5 ? 0 : 1;
+//            deltaMap[tintSaturation] = (int) ofRandom(0, 2);
+//            deltaMap[sobel] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+//            deltaMap[pert] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+//            deltaMap[pertEvoAuto] = ofRandom(0, 0.2);
+//            deltaMap[pertFreq] = ofRandom(1, 10);
+//            deltaMap[skewAmp] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+//            
+//            
+//            deltaMap[omg3D2] = 0;
+//            deltaMap[kalei] = 0;
+//            deltaMap[displaceAmp] = 0;
+//            deltaMap[_reTint] = 0;
+//            deltaMap[hueShift] = 0;
+//        }break;
+//        case 2:{ //glitch
+//            deltaMap[tintHue] = ofRandom(0, 1);
+//            deltaMap[_reTint] = ofRandom(0, 1);
+////            deltaMap[_invert] = ofRandom(0, 1) < 0.5 ? 0 : 1;
+//            deltaMap[hueShift] = ofRandom(0, 1);
+//            deltaMap[hueShiftCrazy] = (int) ofRandom(0, 2);
+//            deltaMap[sobel] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+//            deltaMap[pert] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+//            deltaMap[displaceAmp] = ofRandom(0, 1) * (int) ofRandom(0, 2);
+//            deltaMap[displaceProba] = pow(ofRandom(0, 1), 3);
+//            deltaMap[nFreeze] = ofRandom(0, 6) * (int) ofRandom(0, 2);
+//            
+//            deltaMap[omg3D2] = 0;
+//            deltaMap[kalei] = 0;
+//            deltaMap[pert] = 0;
+//            deltaMap[skewAmp] = 0;
+//            deltaMap[tintSaturation] = 1;
+//        }break;
+//        default:;
+//    }
+////     for(int p=0;p<=N_PARAM;p++)
+////         deltaMap[p] = parameterMap[p];
+//}
 
 #endif

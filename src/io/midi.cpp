@@ -16,7 +16,8 @@ void eqkoscope::sendControlChange(int channel, int control, int value){
 }
 
 void eqkoscope::initMidi(){
-    loadMapping(ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory()+"/../../../MIDIMap.csv").getText(), true, true);
+    try{
+    loadMapping(ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory()+"/../../../"+MIDIMapPath).getText(), true, true);
     
     launchpadOut = ofxMidiOut("Launchpad S");
     launchpadOut.openPort("Launchpad S");
@@ -33,6 +34,51 @@ void eqkoscope::initMidi(){
             chan.push_back(4);
         midiControlValues.push_back(chan);
     }
+    }catch(exception e){
+        ;
+    }
+}
+
+void eqkoscope::initOfflineMIDI(){
+    SimpleMidiReader smr;
+    MidiSequence seq;
+        if (smr.read("/Users/Raph/Sons/Selected\ Drum\ Banks\ For\ Superior\ \&\ EZ\ Drummer/Midi/000601@ANDY_JOHNSON/021@CollapsingDam/1_bar_fill_01.mid", seq)) {
+            std::cout << " format: " << smr.format << ", nb_tracks=" << smr.nb_tracks << "\n";
+            for (size_t j=0; j < seq.evts.size(); ++j) {
+                const MidiSequence::Event &ev = seq.evts[j];
+                vector<unsigned char> rawBytes;
+                for(int b=0;b<ev.midi.size();b++)
+                    rawBytes.push_back(ev.midi[b]);
+                ofxMidiMessage mid(&rawBytes);
+                mid.status = (MidiStatus) rawBytes[0];
+                mid.pitch = rawBytes[1];
+                mid.control = rawBytes[1];
+                mid.value = rawBytes[2];
+                mid.velocity = rawBytes[2];
+                mid.deltatime = ev.when; //hack
+                mid.channel = (rawBytes[0] & 0x0F) + 1;
+                offlineMsgs.push_back(mid);
+                offlineMsgDates.push_back(ev.when*1000);
+                printf("tick %5d track %d %8.4fs ", (int)ev.tick, (int)ev.track, ev.when);
+                for (size_t k=0; k < ev.midi.size(); ++k)
+                    printf(" %02x", ev.midi[k]);
+                printf("\n");
+            }
+        }
+}
+
+void eqkoscope::updateOfflineMIDI(){
+    offlineDate += 1000.0/restrictFrameRate;
+        while(offlineMsgDates[offlineMsgsIndex] <= offlineDate && offlineMsgsIndex<offlineMsgs.size()){
+            newMidiMessage(offlineMsgs[offlineMsgsIndex]);
+            offlineMsgsIndex++;
+        }
+    
+    offlineMsgsIndex;
+    
+//    ofxMidiMessage mid(bytes);
+//    FILE *f = fopen("/Users/Raph/Downloads/jdksmidi-master/songs/test_midi/test6.mid", "r");
+
 }
 
 void eqkoscope::resetMidi(){
@@ -55,7 +101,8 @@ void eqkoscope::openPorts(){
         if(in.isOpen()){
             if(in.getName().compare("Komplete Audio 6") //forbidden port names
                //               && in.getName().compare("nanoKONTROL2 SLIDER/KNOB")
-               && in.getName().compare("APC Key 25")){
+               //&& in.getName().compare("APC Key 25")
+               ){
                 cout << "midi port opened " << in.getName() << endl;
                 in.addListener(this);
                 in.ignoreTypes(false, false, false);
@@ -79,12 +126,17 @@ void eqkoscope::openPorts(){
 void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
 #ifndef SLAVE
     tcpClient.sendRawMsg((char*)(&eventArgs), sizeof(ofxMidiMessage));
+//    cout << "send tcp mess " << ofGetFrameNum() << endl;
     return;
 #endif
+    
     
  if(eventArgs.channel == 16)
         return;
     
+    if(parameterMap[bypassCTRL] && !eventArgs.portName.compare("Launch Control XL") //hack for bypass with launch XL
+       && eventArgs.pitch!=92)
+        return;
     
     /********* MIDI THROUGH **********/
     //    if(eventArgs.channel==15 && eventArgs.status==MIDI_NOTE_ON){
@@ -94,7 +146,7 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
     
     /********* MIDI CLOCK **********/
     if(eventArgs.status==MIDI_TIME_CLOCK){
-    if(parameterMap[bpmLock]==1){
+    if(parameterMap[bpmLock]>0){
         if(clockIndex%(4*24*4)==0){ //reset each four bars
             for(int i=0;i<timedAutos.size();i++)
                 timedAutos[i]->uelapsed = 0;
@@ -109,7 +161,7 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
                 d += MIDIClockDates[i] - MIDIClockDates[i-1];
             }
             d /= float(MIDIClockDates.size()-1);
-            parameterMap[bpm] = round(60*1000000/(d*24.0));
+            parameterMap[bpm] = deltaMap[bpm] = round(60*1000000/(d*24.0));
         }
     }
         return;
@@ -143,7 +195,6 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
     
     /** MACROS **/
     
-    
     if(eventArgs.portName.compare("Launchpad S")){
         
         if(type==MIDI_NOTEON && id==120){ // C8
@@ -173,7 +224,7 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
                     override = true;
                 }
             }
-            if(noteAutoFastMap[channel-1][id-1].size()>0){
+            if(eventArgs.portNum!=-2 && noteAutoFastMap[channel-1][id-1].size()>0){ //factory
                 for(Auto* a : noteAutoFastMap[channel-1][id-1]){
                     if(a->minId != a->maxId){
                         a->update(ofMap(eventArgs.pitch, a->minId, a->maxId, 0, 1));
@@ -190,7 +241,7 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
                     override = true;
                 }
             }
-            if(noteAutoFastMap[channel-1][id-1].size()>0){
+            if(eventArgs.portNum!=-2 && noteAutoFastMap[channel-1][id-1].size()>0){ //factory
                 for(Auto* a : noteAutoFastMap[channel-1][id-1]){
                     if(a->hold){
                         a->update(0);
@@ -202,11 +253,11 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
         case MIDI_CONTROL_CHANGE:{
             for(int i=0;i<midiCCAutos.size();i++){
                 if(midiCCAutos[i]->channel == channel && midiCCAutos[i]->minId == id){
-                    midiCCAutos[i]->update(value/127.0);
+                    midiCCAutos[i]->update(eventArgs.value/127.0);
                     override = true;
                 }
             }
-            if(ccAutoFastMap[channel-1][id-1].size()>0){
+            if(eventArgs.portNum!=-2 && ccAutoFastMap[channel-1][id-1].size()>0){ //factory
                 for(Auto* a : ccAutoFastMap[channel-1][id-1]){
                     a->update(eventArgs.value/127.0);
                     //                        override = true;
@@ -225,6 +276,26 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
         midiMsgs.push_back(eventArgs);
         midiMutex.unlock();
     }
+    
+    if(eventArgs.channel == 8 && eventArgs.control==104){
+        audioAutos.clear();
+        timedAutos.clear();
+        leapAutos.clear();
+        oscAutos.clear();
+        midiCCAutos.clear();
+        midiNoteonAutos.clear();
+        
+        initParameters();
+        loadMapping(ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory()+"/../../../"+MIDIMapPath).getText(), true, true);
+        loadMacroMap();
+        
+        analyzeMacros();
+        
+        for(int i=0;i<N_PARAM;i++){
+            deltaMap[i] = parameterMap[i];
+        }
+        return;
+    }
 }
 
 void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
@@ -235,6 +306,10 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
 #endif
     
     if(ofGetFrameNum()<3)
+        return;
+    
+    if(parameterMap[bypassCTRL] && !eventArgs.portName.compare("Launch Control XL") //hack for bypass with launch XL
+       && eventArgs.pitch!=92)
         return;
     
     if(eventArgs.status==MIDI_START){
@@ -256,6 +331,11 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
     
     if(eventArgs.status==MIDI_CONTROL_CHANGE && eventArgs.channel==assignChannel && eventArgs.control==100){
         deltaMap[featuredParameter] = parameterMap[featuredParameter] = eventArgs.value / 127.0;
+        return;
+    }
+    
+    if(eventArgs.status==MIDI_NOTE_ON && eventArgs.channel==1 && eventArgs.pitch==91){
+        eraseControlMapping(false); //kill all user automations
         return;
     }
     
@@ -327,7 +407,7 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
     }
     
     
-    if(eventArgs.channel == 3 || eventArgs.channel == 4 || (eventArgs.channel == 2 && eventArgs.control==91)){ //regular interfaces
+    if(eventArgs.channel == 1 || eventArgs.channel == 3 || eventArgs.channel == 4 || (eventArgs.channel == 2 && eventArgs.control==91)){ //regular interfaces
         if(scenes[parameterMap[currentScene]]==feedbackScene && parameterMap[embedUzi] && eventArgs.pitch>=52){
             eventArgs.pitch -= 16;
             uzi->midiEvent(eventArgs);
@@ -471,6 +551,12 @@ void eqkoscope::updateMidi(){
                 in.setVerbose(false);
                 in.openPort(i);
                 string name = in.getName();
+                if(enforce_launchControl)
+                    if(in.isOpen() && (!name.compare(LAUNCHCONTROL_DEVICE)))
+                        is_launchControl = true;
+                if(enforce_mpd24)
+                    if(in.isOpen() && (!name.compare(MPD24_DEVICE)))
+                        is_mpd24 = true;
                 if(enforce_io2)
                     if(in.isOpen() && (!name.compare(MPD_DEVICE) || !name.compare("Akai MPD24")))
                         is_io2 = true;
@@ -481,14 +567,15 @@ void eqkoscope::updateMidi(){
                     if(in.isOpen() && strStartsWith(name, "SL MkII Port"))
                         is_novation = true;
                 if(enforce_launchpad)
-                    if(in.isOpen() && !name.compare("Launchpad S"))
+                    if(in.isOpen() && !name .compare("Launchpad S"))
                         is_launchpad = true;
                 if(enforce_nano)
                     if(in.isOpen() && !name.compare("nanoKONTROL2 SLIDER/KNOB"))
                         is_nano = true;
             }catch(exception e){}
         }
-        if((enforce_io2 && !is_io2) || (enforce_novation && !is_novation) || (enforce_launchpad && !is_launchpad) || (enforce_nano && !is_nano) || (enforce_external_device && !is_external_device)){
+        if((enforce_mpd24 && !is_mpd24) ||(enforce_launchControl && !is_launchControl) ||
+           (enforce_io2 && !is_io2) || (enforce_novation && !is_novation) || (enforce_launchpad && !is_launchpad) || (enforce_nano && !is_nano) || (enforce_external_device && !is_external_device)){
             openPorts();
         }
     }

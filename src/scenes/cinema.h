@@ -173,13 +173,14 @@ public:
         }
         fbo.end();
         
-        
+        if(app->parameterMap[circle]>0){
         copyFbo.begin();
         fbo.draw(0,0);
         copyFbo.end();
         pastFbos.push_back(copyFbo);
         if(pastFbos.size()>nbPastFbos)
             pastFbos.erase(pastFbos.begin());
+        }
         
         
         /** POST TRAITEMENT **/
@@ -327,7 +328,14 @@ public:
             if(playerIntensities[i]>0){
                 if(app->parameterMap[movieSpeed]!=players[i]->getSpeed())
                     players[i]->setSpeed(app->parameterMap[movieSpeed]);
-                players[i]->update();
+                if(app->savingGif){
+                    players[i]->setPaused(true);
+                players[i]->nextFrame();
+                    players[i]->update();
+                }else{
+                    players[i]->setPaused(false);
+                    players[i]->update();
+                }
             }
         
         
@@ -462,9 +470,11 @@ public:
         }
     }
     
+    void mousePressed(int x, int y, int button){}
     void mouseDragged(int x, int y, int button){
     }
-    
+    void mouseMoved(int x, int y){}
+
     void touchMoved(ofTouchEventArgs &touch){
         
     }
@@ -484,6 +494,20 @@ public:
     void parseMidi(ofxMidiMessage eventArgs){
         float value = eventArgs.value;
         switch(eventArgs.channel){
+            case 1:{
+                if(eventArgs.status==MIDI_CONTROL_CHANGE){
+                    switch(eventArgs.control){
+                        case 106:{
+                            if(eventArgs.value>0)
+                                randomPosition(ofRandom(0,0));
+                        }break;
+                        case 107:{
+                            if(eventArgs.value>0)
+                                randomPosition(ofRandom(0,1));
+                        }break;
+                    }
+                }break;
+            }
             case 4: case 3:{
             switch(eventArgs.status){
             case MIDI_CONTROL_CHANGE:{
@@ -619,6 +643,7 @@ public:
     
     
     void randomPosition(float r){
+#ifndef NO_SCENE_CUTS
         string path = players[app->parameterMap[selectedPlayer]]->getMoviePath();
         float pos, pos2;
         if(playerScenes[path].size()>0){
@@ -628,9 +653,10 @@ public:
             players[app->parameterMap[selectedPlayer]]->setFrame(pos);
             app->parameterMap[loopLength] = pos2-pos;
             app->parameterMap[loopStart] = pos;
-        }else{
+        }else
+#endif
             players[app->parameterMap[selectedPlayer]]->setPosition(r);
-        }
+        
     }
     
     void randomScene(string tag){
@@ -703,6 +729,20 @@ public:
             if(found)
                 break;
         }
+        
+        if(!found){
+            players[0]->closeMovie();
+            delete players[0];
+
+        
+            players[0] = new ofVideoPlayer;
+            try{
+                    players[0]->loadMovie(vidPath);
+            }catch ( const std::exception & e ) {
+                cout << e.what() << endl;
+            }
+
+        }
     }
     
     void load(){
@@ -768,7 +808,10 @@ public:
             saveParameterXML(xml, ss.str(), players[i]->getMoviePath());
             ss.str("");
             ss << "vidPosition" << i ;
-            saveParameterXML(xml, ss.str(), players[i]->getPosition());
+            if(app->saveMacroTC)
+                saveParameterXML(xml, ss.str(), players[i]->getPosition());
+            else
+                saveParameterXML(xml, ss.str(), app->currentTC);
         }
         
         (*xml) << "</cinema>" << endl;
@@ -792,6 +835,8 @@ public:
             ss.str("");
             ss << "vidPosition" << i ;
             float position = xml->getFloatValue(ss.str());
+            if(i==0)
+                app->currentTC = position;
             
             
             playerIntensities[i] = intensity;
@@ -863,6 +908,14 @@ public:
             }
         }
 #endif
+    }
+    
+    void setResolution(int res){
+        int w = 16*res/9;
+        
+        fbo.allocate(WIDTH, HEIGHT, GL_RGB);
+        remanentFbo.allocate(WIDTH, HEIGHT2, GL_RGB);
+        copyFbo.allocate(WIDTH,HEIGHT, GL_RGB);
     }
     
     ofFbo remanentFbo;

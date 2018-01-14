@@ -19,6 +19,7 @@
 #define MATCH 0
 #define EXPLODE 1
 #define IMPLODE 2
+#define IMMEDIATE 3
 
 //Todo tout mettre dans un mesh
 //record, + augmenter le gestes
@@ -53,6 +54,8 @@ public:
         back=true;
         load();
         computeDistances();
+        
+        diplaceShader.load("../shaders/displaceVertex");
         
         trait.loadImage("assets/trait.png");
         
@@ -136,16 +139,12 @@ public:
         ofTranslate(-app->parameterMap[draw_ox], -app->parameterMap[draw_oy], 0);
         
         ofSetColor(255,255,255);
-        
         ofBackground(0);
-//        ofSetColor(ofColor::black);
-//        ofRect(-100000,-100000, WIDTH, HEIGHT);
-//        ofRect(-100000,-100000, WIDTH+100000, HEIGHT+100000);
-//        
+        
         ofTranslate(WIDTH/2, HEIGHT/2);
-        rotY += app->parameterMap[draw_rotY];
-        ofRotateY(rotY);
-        //        ofRotateY(ofGetFrameNum()%6<3 ? -20:20);
+        ofRotateX(app->parameterMap[mediaRotX]);
+        ofRotateY(app->parameterMap[mediaRotY]);
+        ofRotateZ(app->parameterMap[mediaRotZ]);
         ofSetColor(ofColor::white);
         int connections[(int)DRAWNPTS] = {0};
         int closest[(int)DRAWNPTS] = {0};
@@ -219,6 +218,7 @@ public:
             mesh.clear();
             float dm = app->parameterMap[draw_minConnectionLength];
             float dM = app->parameterMap[draw_maxConnectionLength];
+            
 
             for(int i=0;i<linePts1.getNumVertices();i++){
                 if(p>2){
@@ -298,7 +298,14 @@ public:
             embedScene->getTexture()->bind();
             }
             
-            mesh.draw();
+//            diplaceShader.load("../shaders/displaceVertex");
+//            diplaceShader.begin();
+            for(int i=0;i<app->parameterMap[shapeWeight];i++){
+                ofTranslate(0,1*i);
+                mesh.draw();
+                ofTranslate(0,-1*i);
+            }
+            //            displaceShader.end();
             
             ///test
             if(embedScene!=0 &&  embedScene->getTexture()!=0){
@@ -311,7 +318,11 @@ public:
         }
         if(p==1){
             mesh.setMode(OF_PRIMITIVE_POINTS);
+            for(int i=0;i<app->parameterMap[shapeWeight];i++){
+                ofTranslate(0,1*i);
             mesh.draw();
+                ofTranslate(0,-1*i);
+            }
             
         }
         
@@ -327,11 +338,40 @@ public:
     void capture(ofFbo* fbo){ }
     
     void update(){
+        
+        if(createLightning.size()>0){
+            for(int iter=0;iter<3;iter++){ //sets the speed
+                for(int l=0;l<createLightning.size();l++){
+                    if(createLightning[l]>0){
+                        recordPoint(lightningPoint[l], ofColor::white);
+                        lightningPoint[l].x += (ofNoise((l*1000 + ofGetFrameNum() + lightningPoint[l].x) / (1 + app->parameterMap[user1]))-0.5)*HEIGHT/(3);
+                        lightningPoint[l].y += ofNoise(l*1000 + ofGetFrameNum() + lightningPoint[l].y)*HEIGHT/12
+                        * ofMap(lightningPoint[l].y, -HEIGHT/2, HEIGHT/2, 1, 0.33)
+                        * (1-ofRandom(0, lightningPoint[l].z));
+                        createLightning[l] -= 0.05;
+                        if(ofRandom(1) < 0.05+app->parameterMap[user2]){
+                            int index = createLightning.size();
+                            createLightning.push_back(ofRandom(0, createLightning[l]));
+                            lightningPoint.push_back(lightningPoint[l]);
+                            lightningPoint[index].z = min(ofRandom(max(0.3f, lightningPoint[l].z*2), 1), 1.0f); //divergence
+                        }
+//                        break;
+                    }
+                }
+            }
+        }
+        
+        if(interpolatePoints){
+            liveInterpolate();
+        }
+        
         if(ofGetFrameNum()%100==0) //grab focus
+#ifndef ROZLAV
 #ifdef DEBUG
             ofSystem("open -a eqkoscopeDebug.app");
 #else
         ofSystem("open -a eqkoscope.app");
+#endif
 #endif
         
         if(embedScene!=0)
@@ -351,6 +391,10 @@ public:
         if(app->parameterMap[draw_destroy]){
             if(dest!=0 && (*dest).size()){
                 switch((int) app->parameterMap[draw_destroyMode]){
+                    case IMMEDIATE:{
+                        dest->clear();
+                        colors.clear();
+                    }break;
                     case MATCH:{
                         int nb = max(5.0, (*dest).size()/10.0);
                         for(int i=0;i<nb;i++){
@@ -476,6 +520,8 @@ public:
         if((preAnalysis && analyzeLines && drawnPts.getNumVertices()>0) || 1==1){
             linePts1.clear();
             linePts2.clear();
+            if(app->parameterMap[draw_consecutive]==0){
+
             for(int i=0;i<currentDrawNb;i++){
                 for(int j=i+1;j<currentDrawNb;j++){
                     float x2 = drawnPts.getVertex(i).x-drawnPts.getVertex(j).x;
@@ -489,6 +535,20 @@ public:
                         linePts2.addColor(colors[i]);
 //                        linePts1.addColor(ofColor::fromHsb(ofRandom(255), 255, 255));
 //                        linePts2.addColor(ofColor::fromHsb(ofRandom(255), 255, 255));
+                    }
+                }
+            }
+            }else{
+                for(int i=1;i<currentDrawNb;i++){
+                    float x2 = drawnPts.getVertex(i).x-drawnPts.getVertex(i-1).x;
+                    float y2 = drawnPts.getVertex(i).y-drawnPts.getVertex(i-1).y;
+                    float z2 = drawnPts.getVertex(i).z-drawnPts.getVertex(i-1).z;
+                    float d = sqrt(x2*x2+y2*y2+z2*z2);
+                    if(d<app->parameterMap[draw_maxConnectionLength] && d > app->parameterMap[draw_minConnectionLength] ){
+                        linePts1.addVertex(drawnPts.getVertex(i-1) + perturbations[i-1]);
+                        linePts2.addVertex(drawnPts.getVertex(i) + perturbations[i]);
+                        linePts1.addColor(colors[i-1]);
+                        linePts2.addColor(colors[i]);
                     }
                 }
             }
@@ -895,7 +955,15 @@ public:
     }
     
     /** INTERACTION **/
-    
+    void mousePressed(int x, int y, int button){
+        if(app->isCmdModifier && recPts.size()>0){
+            recordPoint(x,y,0, ofColor::white);
+            interpolatePoints = true;
+            interpolateI1 = recPts.size()-2;
+            interpolateI2 = recPts.size()-1;
+        }
+    }
+
     void mouseDragged(int x, int y, int button){
         recordPoint(x,y,0, ofColor::white);
         cursorX = ofGetMouseX();
@@ -925,6 +993,10 @@ public:
         cursorY = y;
     }
     
+    void recordPoint(ofVec3f v, ofColor color){
+        recordPoint(v.x + WIDTH/2 - app->deltaMap[draw_ox], v.y+ HEIGHT/2 - app->deltaMap[draw_oy], v.z- app->deltaMap[draw_oz], color);
+    }
+    
     void recordPoint(int x, int y, int z, ofColor color){
         interpolate = -1;
         app->deltaMap[draw_destroy] = 0;
@@ -949,6 +1021,16 @@ public:
             savePoints(str.str(), &recPts);
         }
         currentDrawNb = recPts.size();
+    }
+    
+    void liveInterpolate(){
+        if(recPts[interpolateI1].distance(recPts[interpolateI2]) < app->parameterMap[draw_maxConnectionLength]){
+            interpolatePoints = false;
+        }else{
+//            recordPoint((recPts[interpolateI1] + recPts[interpolateI2])/ 2,  ofColor::white);
+            recordPoint(recPts[interpolateI1] + (recPts[interpolateI2]-recPts[interpolateI1]).normalized() * ofRandom(app->parameterMap[draw_minConnectionLength], app->parameterMap[draw_maxConnectionLength]-1),  ofColor::white);
+            interpolateI1 = recPts.size()-1;
+        }
     }
     
     void savePoints(string path, vector<ofVec3f>* pts){
@@ -1039,6 +1121,24 @@ public:
                 app->parameterMap[draw_oz] -= 15;
                 //                doMidLine();
                 break;
+            case ' ':{
+                _createLightning(app->isCmdModifier ? 4 : 1, -HEIGHT/2, 0);
+            }break;
+            case '+':{
+                _createLightning(4, -HEIGHT/2, 0);
+            }break;
+        }
+    }
+    
+    void _createLightning(int nb, int w, int h){
+        createLightning.clear();
+        lightningPoint.clear();
+        destruction(IMMEDIATE);
+        for(int x=0;x<nb;x++){
+        createLightning.push_back(3);
+        lightningPoint.push_back(ofVec3f(0, w, h)
+                                 + ofVec3f(app->parameterMap[mediaX], app->parameterMap[mediaY], app->parameterMap[mediaZ])
+                                 + ofVec3f(app->deltaMap[draw_ox], app->deltaMap[draw_oy], app->deltaMap[draw_oz]));
         }
     }
     
@@ -1119,6 +1219,10 @@ public:
     void exit(){};
     
     Cinema* embedScene = 0;
+    
+    void setResolution(int r){
+        
+    }
 
     
 protected:
@@ -1190,6 +1294,13 @@ protected:
     
     int cursorX = 0, cursorY=0;
     
+    ofShader diplaceShader;
+    
+    bool interpolatePoints = false;
+    int interpolateI1, interpolateI2;
+    
+    vector< float > createLightning;
+    vector< ofVec3f > lightningPoint;
     
 };
 

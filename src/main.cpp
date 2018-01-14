@@ -37,8 +37,9 @@ int main(int argc, char *argv[]){
         ofSetWindowPosition(0, 0);
     }
     if(app->dualDisplay)
-        ofSetWindowPosition(-1280, 0);
-
+        ofSetWindowPosition(-app->FINALWIDTH, 0); 
+//    ofSetWindowPosition(-WIDTH, 0); //hack for installation
+    
     ofRunApp(app);
     
 }

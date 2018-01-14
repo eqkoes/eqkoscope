@@ -45,6 +45,7 @@ public:
         erodeShader.load("../shaders/erode");
         
         alphaShader.load("../shaders/alpha");
+        blendShader.load("../shaders/blend");
         hBackShader.load("../shaders/hBack");
         
         
@@ -170,22 +171,17 @@ public:
             ofPushMatrix();
             
             ofSetColor(app->parameterMap[feedbackRemanence] * 255);
-            if(app->parameterMap[post_traitement])
-                remanentFbo->draw(-WIDTH/2,-HEIGHT2/2); //draw the olde image
-            else
-                remanentFbo->draw(-WIDTH/2,HEIGHT2/2, WIDTH, -HEIGHT2);
-            
+           
+            remanentFbo->draw(-WIDTH/2,-HEIGHT2/2);
             
             if(app->parameterMap[blackCenter]){
                 ofSetColor(ofColor::black);
                 ofCircle(WIDTH/2, HEIGHT2/2, 5*(app->parameterMap[scale]-0.7));
                 ofSetColor(ofColor::white);
             }
-            //hBackShader.end();
-            
-            //alphaShader.end();
+
             ofPopMatrix();
-            
+
             ofRotate(-app->parameterMap[rot]);
             ofRotateX(-app->parameterMap[pitchRot]);
             
@@ -211,6 +207,10 @@ public:
                     drawPoints();
                 
                 ofRotate(app->parameterMap[curShapeRot]);
+                ofRotateX(app->parameterMap[mediaRotX]);
+                ofRotateY(app->parameterMap[mediaRotY]);
+                ofRotateZ(app->parameterMap[mediaRotZ]);
+                ofTranslate(app->parameterMap[mediaX]*WIDTH,app->parameterMap[mediaY]*HEIGHT,app->parameterMap[mediaZ]*HEIGHT);
                 if(shapeMesh.getNumVertices()>0){
                     for(int i=0;i<app->parameterMap[shapeWeight];i++){
                         ofTranslate(0,1*i);
@@ -225,19 +225,21 @@ public:
                     }
                     shapeMesh.draw();
                 }
+                if(shapeId != app->deltaMap[shapeNbPts] + app->deltaMap[shapeStyle]*1000) //draw a new shape
+                shapeId = app->deltaMap[shapeNbPts] + app->deltaMap[shapeStyle]*1000;
             }
         }ofPopMatrix();
         
-        if(nestedScene!=0){
-            ofEnableBlendMode(OF_BLENDMODE_ADD);
-            ofSetColor(ofColor(255,255,255, app->parameterMap[mediaAlpha]*255));
-            alphaShader.begin();
-            ofPushMatrix();
-            nestedScene->draw();
-            ofPopMatrix();
-            alphaShader.end();
-            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-        }
+//        if(nestedScene!=0){
+//            ofEnableBlendMode(OF_BLENDMODE_ADD);
+//            ofSetColor(ofColor(255,255,255, app->parameterMap[mediaAlpha]*255));
+//            alphaShader.begin();
+//            ofPushMatrix();
+//            nestedScene->draw();
+//            ofPopMatrix();
+//            alphaShader.end();
+//            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+//        }
         
         if(!app->parameterMap[noSource]){
             if (app->deltaMap[feedMode] == MODE_GLITCH)
@@ -246,21 +248,23 @@ public:
         
         source->end();
         
-        if(app->parameterMap[erode]){
+        if(app->parameterMap[erode])
+        {
             applyErosion(source, source2);
             applyThreshold(source2, source);
             source->draw(0,0);
-        }else{
+        }
+        else
+        {
             applyThreshold(source, source2);
             source2->draw(0,0);
         }
         
-                    bool invert = app->parameterMap[f_invertFrame] || (app->parameterMap[f_strobe] && app->parameterMap[doubleInversion]);
-        if(invert){
+        bool invert = app->parameterMap[f_invertFrame]
+        || (app->parameterMap[f_strobe] && app->parameterMap[doubleInversion]);
+        if(invert)
+        {
             applyInvert(source2, source);
-//            ofFbo* tmp = source;
-//            source = source2;
-//            source2 = tmp;
         }
     }
     
@@ -342,6 +346,7 @@ public:
     }
     
     void updateShape(){
+        shapeMeshNb = app->deltaMap[shapeNbPts];
         if(app->deltaMap[shapeStyle]==GEO){
             ofPolyline path;
             int s = WIDTH/4;
@@ -393,7 +398,7 @@ public:
                 ofPopMatrix();
             }
             path.close();
-            glLineWidth(app->parameterMap[shapeWeight]);
+//            glLineWidth(app->parameterMap[shapeWeight]);
             for(int i=0;i<app->parameterMap[shapeWeight];i++){
                 ofTranslate(0,1*i);
                 path.draw();
@@ -431,7 +436,23 @@ public:
     void capture(ofFbo* fbo){
         remanentFbo->begin();
         fbo->draw(0,0);
-        //circleMask2.draw(0,0, WIDTH, HEIGHT2);
+        if(nestedScene!=0){
+//            blendShader.load("../shaders/blend");
+            
+            int mode = app->parameterMap[blendType];
+            if(mode==13)
+                blendShader.setUniformTexture("tex1", *remanentFbo, 0);
+            
+            blendShader.begin();
+            blendShader.setUniform1i("mode", mode);
+            blendShader.setUniform1f("thresh", 0.3);
+            //            blendShader.setUniform1f("feedbackCompensation", 1.33);
+            
+            ofPushMatrix();
+            nestedScene->draw();
+            ofPopMatrix();
+            blendShader.end();
+        }
         remanentFbo->end();
     }
     
@@ -447,16 +468,8 @@ public:
         app->deltaMap[rot] = app->parameterMap[rot] ;
         app->parameterMap[pitchRot] += app->deltaMap[pitchRot];
         
-//        app->parameterMap[pitchRot] += (app->deltaMap[pitchRot]-app->parameterMap[pitchRot])*0.5;
-        
-        if(app->deltaMap[scale]<0.7)
-            app->deltaMap[scale] = 0.7;
-        if(app->deltaMap[scale]>2.7)
-            app->deltaMap[scale] = 2.7;
-        
-//        app->parameterMap[scale] += (app->deltaMap[scale] - app->parameterMap[scale])*0.7;//hagnew
-//        app->parameterMap[offx] += (app->deltaMap[offx]-app->parameterMap[offx])*0.1;
-//        app->parameterMap[offy] += (app->deltaMap[offy]-app->parameterMap[offy])*0.1;
+//        if(app->deltaMap[scale]<0.7)     app->deltaMap[scale] = 0.7;
+//        if(app->deltaMap[scale]>2.7)    app->deltaMap[scale] = 2.7;
         
         app->parameterMap[curShapeRot] += app->parameterMap[shapeRot];
         app->deltaMap[curShapeRot] = app->parameterMap[curShapeRot] ;
@@ -483,12 +496,18 @@ public:
         else
             while(points.size()<app->parameterMap[nbPoints])
                 points.push_back(EPoint(ofVec3f(ofRandom(WIDTH), ofRandom(HEIGHT), 0), ofRandom(25)));
-    }
     
+        if(shapeMeshNb != app->deltaMap[shapeNbPts])
+            updateShape();
+    
+    }
+    void mousePressed(int x, int y, int button){}
+
     void mouseDragged(int x, int y, int button){
         app->parameterMap[pointx] = x;
         app->parameterMap[pointy] = y;
     }
+    void mouseMoved(int x, int y){}
     
     void touchMoved(ofTouchEventArgs &touch){
         
@@ -735,6 +754,16 @@ public:
         }
     }
     
+    void loadDirectImage(string path){
+        events.push_back("changeImage");
+        imageUzi=true;
+        ofImage img;
+        img.loadImage(path);
+        img.resize(WIDTH,HEIGHT);
+        imgs.push_back(img);
+        imgChoice = imgs.size()-1;
+    }
+    
     void loadImgs() {
         for (int i=0;i<9;i++) {
             stringstream s;
@@ -806,6 +835,21 @@ public:
     
     void exit(){}
     
+    void setResolution(int res){
+        delete img;
+        delete remanentFbo;
+        delete source;
+        delete source2;
+        img = new ofImage;
+        img->allocate(WIDTH, HEIGHT2, OF_IMAGE_COLOR);
+        remanentFbo = new ofFbo;
+        remanentFbo->allocate(WIDTH, HEIGHT2);
+        source = new ofFbo;
+        source->allocate(WIDTH, HEIGHT2);
+        source2 = new ofFbo;
+        source2->allocate(WIDTH, HEIGHT2);
+    }
+    
 public:
     ofFbo* source,*source2;
 
@@ -827,13 +871,16 @@ public:
     
     //SHAPES
     ofMesh shapeMesh;
+    int shapeMeshNb = 0;
     vector<ofColor> randomColor;
     
     vector<EPoint> points;
     
     //NESTED
     Scene *nestedScene=0;
-    ofShader alphaShader;
+    ofShader alphaShader, blendShader;
+    
+    int shapeId = 0;
 };
 
 #endif /* defined(__emptyExample__Feedback__) */

@@ -9,6 +9,8 @@
 #ifndef eqkoscope_kinect_h
 #define eqkoscope_kinect_h
 
+
+
 //a mettre dans Kinectscene
 if(1==0){
     //            kinectMesh.clear();
