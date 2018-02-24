@@ -8,8 +8,8 @@
 #include <arpa/inet.h>
 
 void eqkoscope::initOSC(){
-    receiver.setup(5555);
-    
+    receiver.setup(OSC_INPUT);
+
     //get my IP address
     struct ifaddrs * ifAddrStruct=NULL;
     struct ifaddrs * ifa=NULL;
@@ -70,9 +70,12 @@ bool eqkoscope::manageOSCParam(ofxOscMessage* m){
 
 bool recordTablet = true;
 void eqkoscope::manageOSC(){
+    if( receiver.getPort() != deltaMap[oscIn]){
+        receiver.setup(deltaMap[oscIn]);
+    }
+    
     int count = 0;
     int maxCount = 100;
-    
     while(receiver.hasWaitingMessages() && (++count<maxCount)){
         ofxOscMessage m;
         receiver.getNextMessage(&m);

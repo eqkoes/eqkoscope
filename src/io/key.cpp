@@ -242,6 +242,10 @@ void eqkoscope::keyPressed(int key){
             break;
 #endif
             
+            case OF_KEY_TAB:
+            guiVisible = !guiVisible;
+            break;
+            
         case '@': reset();
             break;
         case '&': displayFrameRate = !displayFrameRate;
@@ -252,9 +256,22 @@ void eqkoscope::keyPressed(int key){
             if(savingGif){
                 //                gifEncoder.save("../capture/test.gif");
                 savingGif = false;
+                if(!hasTakenVideo){
+                    vidRecorder.close();
+                    vidRecorderIndex++;
+                }
+                hasTakenVideo = true;
+
             }else{
                 savingGif = true;
                 gifIndex = int(ofRandom(1,100000));
+               
+                if(!hasTakenVideo){
+                if(!vidRecorder.isInitialized()){
+                   vidRecorder.setup("capture/vid_"+ofGetTimestampString(), WIDTH, HEIGHT, 30, sampleRate, channels);
+                }
+                    vidRecorder.start();
+                }
             }
             break;
         case ':':
@@ -291,7 +308,7 @@ void eqkoscope::keyPressed(int key){
             nbFramesSinceAudioStart = 0;
         }break;
         case 'k':
-            deltaMap[kalei] = deltaMap[kalei]==0 ? (int) ofRandom(7) : 0;
+            deltaMap[kalei] = deltaMap[kalei]==0 ? ofRandom(1) : 0;
             deltaMap[kaleiNb] = (int) ofRandom(-1,5);
             break;
             //        case 'e': parameterMap[skewAmp] = parameterMap[skewAmp]>0 ? 0 : ofRandom(0.3); break;

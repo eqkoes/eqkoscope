@@ -15,7 +15,6 @@ public:
             
             font.loadFont("Arial", app->parameterMap[fontSize]);
             load();
-            initParameters();
     }
     
     void load(){

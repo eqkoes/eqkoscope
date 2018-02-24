@@ -42,7 +42,6 @@ public:
         
         load();
         
-        brightnessContrastShader.load("../shaders/brightnessContrast");
         circleShader.load("../shaders/circle");
         alphaShader.load("../shaders/alphaBlack");
         alphaWhiteShader.load("../shaders/alphawhite");
@@ -61,9 +60,7 @@ public:
         for(int i=0;i<players.size();i++)
             if(players[i]!=0)
                 players[i]->stop();
-        
-        initParameters();
-        
+                
 //        vlt.stzartThread();
     }
     
@@ -93,12 +90,6 @@ public:
         ofSetColor(ofColor::black);
         ofRect(0,0,WIDTH,HEIGHT2);
         ofSetColor(ofColor::white);
-        //adjustBrightness();
-        if(app->parameterMap[adjust]){
-            brightnessContrastShader.begin();
-            brightnessContrastShader.setUniform1f("brightness", app->parameterMap[brightness]);
-            brightnessContrastShader.setUniform1f("contrast", app->parameterMap[contrast]);
-        }
         
         ofTranslate(WIDTH/2, HEIGHT2/2 + (HEIGHT2 - HEIGHT)/2);
         ofTranslate(app->parameterMap[mediaX]*WIDTH, -app->parameterMap[mediaY]*HEIGHT, app->parameterMap[mediaZ]*HEIGHT);
@@ -153,7 +144,16 @@ public:
                 if(first && app->parameterMap[blendType]!=ALPHABLACK){
                     ofSetColor(playerIntensities[i]*255);
                 }
+                if(app->parameterMap[resize]){
                 players[i]->draw(app->parameterMap[hMirror]?WIDTH:0,app->parameterMap[vMirror]?HEIGHT:0, app->parameterMap[hMirror]?-WIDTH:WIDTH, app->parameterMap[vMirror]?-HEIGHT:HEIGHT);
+                }else{
+                    ofPushMatrix();
+                    ofTranslate(WIDTH/2, HEIGHT/2);
+                    int w = players[i]->getWidth();
+                    int h = players[i]->getHeight();
+                    players[i]->draw(app->parameterMap[hMirror]?w/2:-w/2,app->parameterMap[vMirror]?h/2:-h/2, app->parameterMap[hMirror]?-w/2:w/2, app->parameterMap[vMirror]?-h/2:h/2);
+                    ofPopMatrix();
+                }
                 
                 if(first && app->parameterMap[blendType]!=ALPHABLACK){
                     ofSetColor(ofColor::white);
@@ -211,9 +211,7 @@ public:
                 else
                     fbo.draw(-WIDTH/2,-HEIGHT/2);
                 circleShader.end();
-                //ofEnableBlendMode(OF_BLENDMODE_SCREEN);
                 circleMask.draw(-WIDTH/2,-HEIGHT/2, WIDTH, HEIGHT);
-                //ofEnableBlendMode(OF_BLENDMODE_ALPHA);
                 ofPopMatrix();
             }
         }else{
@@ -235,28 +233,7 @@ public:
             ofPopMatrix();
         }
         
-        
-        if(app->parameterMap[adjust])
-            brightnessContrastShader.end();
         videoMutex.unlock();
-    }
-    
-    void adjustBrightness(){
-        //        unsigned char * pixels = vidPlayer->getPixels();
-        //        unsigned char * newPixels;
-        
-        float b;
-        //        float n = vidPlayer->width*vidPlayer->height;
-        //        for (int x = 0; x<vidPlayer->width; x++){
-        //            for (int y = 0; y<vidPlayer->height; y++){
-        //                int loc = x + y*vidPlayer->width;
-        //                b += pixels[loc] / n;
-        //
-        //            }
-        //        }
-        app->parameterMap[brightness] = (75 - b)/150.0;
-        app->parameterMap[contrast] = 1+(10 - b/10.0)/10.0;
-        app->parameterMap[contrast] = 1+app->parameterMap[brightness]*2;
     }
     
     void randomJump(){
@@ -328,7 +305,7 @@ public:
             if(playerIntensities[i]>0){
                 if(app->parameterMap[movieSpeed]!=players[i]->getSpeed())
                     players[i]->setSpeed(app->parameterMap[movieSpeed]);
-                if(app->savingGif){
+                if(app->savingGif){ // frame by frame
                     players[i]->setPaused(true);
                 players[i]->nextFrame();
                     players[i]->update();
@@ -337,7 +314,7 @@ public:
                     players[i]->update();
                 }
             }
-        
+
         
         
         videoMutex.unlock();
@@ -696,9 +673,6 @@ public:
             loadLaterIndex = ofRandom(strdb[dbIndex].size());
             loadMovie(app->parameterMap[selectedPlayer], dbIndex, loadLaterIndex, true);
         }break;
-        case '<':
-            app->parameterMap[adjust] = !app->parameterMap[adjust];
-            break;
         case '&':
             app->parameterMap[selectedPlayer] = 0;break;
         case 233:
@@ -933,7 +907,7 @@ public:
     int dbIndex = 0;
     int vidIndex = 0;
     
-    ofShader brightnessContrastShader, circleShader;
+    ofShader circleShader;
 
     ofMutex videoMutex;
     

@@ -20,7 +20,7 @@ void eqkoscope::initAudio(){
 //    mySoundStream.setDeviceID(5); //soundflower 2ch
     
     mySoundStream.setup(2, 0, 44100, AUDIO_BUFFER_SIZE, 1);
-    mySoundStream.setDeviceID(0);
+//    mySoundStream.setDeviceID(0);
     mySoundStream.setOutput(this);
 //
     
@@ -29,8 +29,12 @@ void eqkoscope::initAudio(){
 }
 
 void eqkoscope::audioRequested(float * output, int bufferSize, int nChannels){
-    if(!parameterMap[audio])
+    if(!parameterMap[audio]){
+        if(savingGif){
+            vidRecorder.addAudioSamples(output, AUDIO_BUFFER_SIZE, 2); //we need to add dummy samples
+        }
         return;
+    }
     if(nbFramesSinceAudioStart<10){
         nbFramesSinceAudioStart++;
         return;
@@ -38,12 +42,12 @@ void eqkoscope::audioRequested(float * output, int bufferSize, int nChannels){
     
     int index=0;
     ofImage* img = &audioImg;
+    float gain = parameterMap[audio];
 
     if(parameterMap[test]==0){
         float freq = 1;
         float smooth = 1;
         float b = bufferSize*smooth;
-        float gain = 1;
         for(int i=0;i<bufferSize;i++){
             for(int chan=0;chan<nChannels;chan++){
                 float s = 0;
@@ -70,9 +74,12 @@ void eqkoscope::audioRequested(float * output, int bufferSize, int nChannels){
             if(coffset>img->getWidth()*img->getHeight())
                 coffset = 0;
             for(int chan=0;chan<nChannels;chan++)
-                output [i* nChannels] = s;
+                output [i* nChannels] = s * gain;
         }
     }
+    
+    if(savingGif)
+        vidRecorder.addAudioSamples(output, bufferSize, nChannels);
 }
 
 void eqkoscope::audioReceived(float *input, int bufferSize, int nChannels){

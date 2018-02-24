@@ -30,10 +30,8 @@ void AbstractApp::initParameters(){
     parameterMap[omg3D2Scale] = 0;
     parameterMap[omg3D2Strobe] = 0;
     parameterMap[omg3D2Depth] = 1;
-    parameterMap[ball] = false;
     parameterMap[thresholdAfterBall] = false;
     parameterMap[glowResolution] = 25;
-    parameterMap[glowIntensity] = 1;
     parameterMap[borderMask] = 0;
     
     parameterMap[randHHide]=0;
@@ -65,10 +63,7 @@ void AbstractApp::initParameters(){
     parameterMap[lineDa] = 0.75;
     parameterMap[lineDx] = 0;
     parameterMap[flash] = false;
-    parameterMap[triumMode] = 0; //-1 : dual
-    parameterMap[triumSpace1] = 0;
-    parameterMap[triumSpace2] = 0;
-    parameterMap[triumSpace3] = 0;
+    parameterMap[camera] = 0; //-1 : dual
     
     parameterMap[warp] = 0;
     
@@ -87,6 +82,7 @@ void AbstractApp::initParameters(){
     /** COLOR MGMT **/
     parameterMap[tintSaturation]=1;
     parameterMap[tintHue]=0;
+    parameterMap[gradient]=0;
     parameterMap[tintBrightness] = 1;
     parameterMap[tintCenter]=0;
     parameterMap[tintAmp] = 1;
@@ -116,15 +112,13 @@ void AbstractApp::initParameters(){
     parameterMap[skewAAmp]=0.;
     parameterMap[skewVAmp]=0.0;
     parameterMap[skewSpeed]=0.2;
-    parameterMap[skewVAmpMidi];
-    parameterMap[skewAmpMidi];
     parameterMap[skewBorderCopy]=false;
     parameterMap[displaceAmp] = 0.;
     parameterMap[displaceVAmp]=0.;
     parameterMap[displaceProba] = 0.1;
-    parameterMap[chromaOffset] = 100;
-    parameterMap[chromasepAngle]=0;
-    parameterMap[chromasepHue]=50;
+    parameterMap[chromaOffset] = 0;
+    parameterMap[chromaSepAngle]=0;
+    parameterMap[chromaSepHue]=0;
     parameterMap[chromaSep]=0.0;
     parameterMap[chromaSepAlpha]=1.0;
     parameterMap[chromaSepMode]=0;
@@ -159,9 +153,9 @@ void AbstractApp::initParameters(){
     parameterMap[kaleiCopy]=0;
     parameterMap[kaleiCopyAdjust]=0;
     parameterMap[warp]=0;
-    parameterMap[warpRemap] =1;
-    parameterMap[warpX]=0;
-    parameterMap[warpY]=0;
+//    parameterMap[warpRemap] =1;
+//    parameterMap[warpX]=0;
+//    parameterMap[warpY]=0;
     
     parameterMap[stressTest] = 0;
     parameterMap[stressTestRate] = 1;
@@ -221,7 +215,7 @@ void AbstractApp::initParameters(){
     parameterMap[threshold] = 1;
     
     parameterMap[rot] = 0;
-    parameterMap[upRot] = 0.1;
+    parameterMap[upRot] = 0;
     parameterMap[pitchRot] = 0;
     parameterMap[scale] = 0.95;
     parameterMap[offx]=0;
@@ -270,7 +264,6 @@ void AbstractApp::initParameters(){
     parameterMap[posterize] = 255;
     parameterMap[movieSpeed] = 1;
     parameterMap[backMask] = false;
-    parameterMap[brightness]=1;
     parameterMap[adjust] = false;
     parameterMap[loopLength] = 0;
     parameterMap[loopStart] = 0;
@@ -363,7 +356,7 @@ void AbstractApp::initParameters(){
     /** MAPPED **/
      parameterMap[map_event] = 1;
      parameterMap[map_remanence] = 0.67;
-     parameterMap[map_mode] = 200;
+     parameterMap[map_mode] = 101;
      parameterMap[map_sync]  = SYNC_INDIV;
      parameterMap[map_pace]  = 0.005;
      parameterMap[map_prog]  = 0;
@@ -390,7 +383,7 @@ void AbstractApp::initParameters(){
     parameterMap[ledSync]=0;
     parameterMap[ledPeriod]=1000/restrictFrameRate;
     parameterMap[ledInfo]=0;
-    parameterMap[ledBrightness]=0.0;
+    parameterMap[ledBrightness]=1.0;
     parameterMap[ledEvent] = 0;
     parameterMap[ledTint] = 180;
     parameterMap[ledSaturation] = 255;
@@ -432,6 +425,7 @@ void AbstractApp::initParameters(){
     parameterMap[whitePoint] = 1;
     parameterMap[blackPoint] = 0;
 
+    parameterMap[oscIn] = OSC_INPUT;
     
     for(int i=0;i<N_PARAM;i++)
         deltaMap[i] = parameterMap[i];

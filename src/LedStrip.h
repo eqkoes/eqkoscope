@@ -18,6 +18,7 @@ public:
     
     void initParameters(){
     }
+    
     void setup(){
         vector <ofSerialDeviceInfo> info = serial.getDeviceList();
         serial.listDevices();
@@ -30,6 +31,61 @@ public:
     
     void exit(){};
     void draw(){
+        
+      /*  if(0==1){
+            cout << serial.readByte() << endl;
+            cout << serial.readByte() << endl;
+            cout << serial.readByte() << endl;
+            cout << serial.readByte() << endl;
+        }else{
+        
+        int bytesRequired = 8;
+        unsigned char bytes[bytesRequired];
+        int bytesRemaining = bytesRequired;
+        // loop until we've read everything
+        while ( bytesRemaining > 0 )
+        {
+            // check for data
+            if ( serial.available() > 0 )
+            {
+                // try to read - note offset into the bytes[] array, this is so
+                // that we don't overwrite the bytes we already have
+                int bytesArrayOffset = bytesRequired - bytesRemaining;
+                int result = serial.readBytes( &bytes[bytesArrayOffset],
+                                              bytesRemaining );
+                
+                // check for error code
+                if ( result == OF_SERIAL_ERROR )
+                {
+                    // something bad happened
+                    ofLog( OF_LOG_ERROR, "unrecoverable error reading from serial" );
+                    // bail out
+                    break;
+                }
+                else if ( result == OF_SERIAL_NO_DATA )
+                {
+                    // nothing was read, try again
+                }
+                else
+                {
+                    bytesRemaining -= result;
+                }
+            }
+        }
+        int a = int((unsigned char)(bytes[0]) << 24 |
+                    (unsigned char)(bytes[1]) << 24 |
+                    (unsigned char)(bytes[0]) << 24 |
+                    (unsigned char)(bytes[0]) << 24 |
+                    (unsigned char)(bytes[1]) << 16 |
+                    (unsigned char)(bytes[2]) << 8 |
+                    (unsigned char)(bytes[3]));
+        
+        cout << a << endl;
+        }
+        
+        if(1==1)
+            return;
+        */
         
       /*  unsigned char tmpmode = app->parameterMap[ledMode];
         unsigned char tmpsync = app->parameterMap[ledSync];

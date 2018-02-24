@@ -16,20 +16,27 @@
 
 #define HEIGHT2 HEIGHT // set to WIDTH for rect fbos
 
+#define CAMERA 1
 
 /** SPECIAL MODES **/
 
-#define NO_STROBE 1
+//#define NO_STROBE 1
 #define ATELIERS 1
 
 //#define GENETIC 1
 
 #define DEBUG 1
 
+
+#define INSTALL_COCHON 1
+
 //#define INSTALL_THOUGHTS 1
 #ifdef INSTALL_THOUGHTS
 #define MAPPING 1
 #endif
+
+#define MPD24_DEVICE "Akai MPD24"
+#define LAUNCHCONTROL_DEVICE "Launch Control XL"
 
 //#define ROZLAV 1
 #ifndef ROZLAV
@@ -37,17 +44,16 @@
 //#define GAME 1
 #define LEAPMOTION 1
 //#define BRASERO 1
-#ifdef BRASERO
-#define KINECT 1
-#endif
+    #ifdef BRASERO
+    #define KINECT 1
+    #endif
 
 #define _LEDS_STRIP 1
 //#define LAZERS 1
 #define USE_FREEZE 1
 //#define REAL_TIME_FX 1
 #define MPD_DEVICE "io|2"
-#define MPD24_DEVICE "Akai MPD24"
-#define LAUNCHCONTROL_DEVICE "Launch Control XL"
+
 #else
 #define MPD_DEVICE "P\216riph\216rique MIDI USB"
 #endif
@@ -71,6 +77,8 @@
 //#define AUDIO_BUFFER_SIZE 512
 #define BOOL_PARAM_EPSILON 0.01
 //#define USE_PRELOADED_MOVIES 1
+
+#define OSC_INPUT 8888
 
 //UTILS
 #define miiin(a,b) ((a) < (b) ? (a) : (b))

@@ -10,6 +10,7 @@
 #include <sstream>
 #include "math.h"
 #include "stdlib.h"
+#include <ofVideoGrabber.h>
 
 #define CENTRAL 0
 #define LEFT 1
@@ -22,6 +23,8 @@
 #define MODE_FEEDBACK 0
 #define MODE_GLITCH 1
 
+// log : removed imageUzi etc
+
 class Feedback : public Scene
 {
     
@@ -29,7 +32,7 @@ public:
     
     Feedback(AbstractApp* app) : Scene(app, "feedback"){
         sceneID = "feedback";
-
+        
         img = new ofImage;
         img->allocate(WIDTH, HEIGHT2, OF_IMAGE_COLOR);
         remanentFbo = new ofFbo;
@@ -51,12 +54,12 @@ public:
         
         shapeMesh.setMode(OF_PRIMITIVE_LINE_LOOP);
         
-        vidPlayer = new ofVideoPlayer;
-        
         randomColor.reserve(100);
         updateRandomColor();
         
-        initParameters();
+        #ifdef CAMERA
+        grabby.listDevices();
+#endif
     }
     
     void setup(){
@@ -65,8 +68,8 @@ public:
     }
     
     void draw(){
-//        for(map<string,float>::iterator it=app->parameterMap.begin();it!=app->parameterMap.end();it++)
-//            cout << it->first << " " << it->second << endl;
+        //        for(map<string,float>::iterator it=app->parameterMap.begin();it!=app->parameterMap.end();it++)
+        //            cout << it->first << " " << it->second << endl;
         
         
         source->begin();
@@ -77,33 +80,9 @@ public:
             ofSetColor(ofColor::white);
         }
         
+        
         for (int e=0;e<events.size();e++) {
-            if (!events.at(e).compare("changeImage")) {
-                if (app->deltaMap[feedMode]==MODE_FEEDBACK){
-                    drawImg = true;
-                    imgSrc = &(imgs.at(imgChoice));
-                    drawVid = false;
-                }
-                break;
-            }
-            if (!events.at(e).compare("changeImgPath")) {
-                if (app->deltaMap[feedMode]==MODE_FEEDBACK && crtImgPath.compare("")){
-                    drawImg = true;
-                    crtImg.loadImage(crtImgPath);
-                    crtImg.resize(WIDTH, HEIGHT);
-                    imgSrc = &crtImg;
-                    drawVid = false;
-                }
-                break;
-            }
-            if (!events.at(e).compare("changeVidPath")) {
-                if (app->deltaMap[feedMode]==MODE_FEEDBACK && crtVidPath.compare("")){
-                    drawVid = true;
-                    vidPlayer->loadMovie(crtVidPath);
-                    vidPlayer->play();
-                }
-                break;
-            }
+            
             if (!events.at(e).compare("invert")) {
                 app->parameterMap[f_invertFrame] = true;
                 app->parameterMap[doubleInversion] = true;
@@ -158,9 +137,6 @@ public:
         }
         events.clear();
         
-        if (imageUzi)
-            events.push_back("changeImage");
-        
         ofPushMatrix();{
             ofTranslate(WIDTH/2, HEIGHT2/2);
             ofTranslate(app->parameterMap[offx], app->parameterMap[offy]);
@@ -171,34 +147,46 @@ public:
             ofPushMatrix();
             
             ofSetColor(app->parameterMap[feedbackRemanence] * 255);
-           
-            remanentFbo->draw(-WIDTH/2,-HEIGHT2/2);
+            
+            remanentFbo->draw(-WIDTH/2,-HEIGHT2/2); //blend ?
+            
+            ofPushMatrix();
+            {
+                ofScale(1/app->parameterMap[scale], 1/app->parameterMap[scale]);
+                ofTranslate(-WIDTH/2, -HEIGHT2/2);
+                
+                ofTranslate(app->parameterMap[mediaX]*WIDTH, -app->parameterMap[mediaY]*HEIGHT, app->parameterMap[mediaZ]*HEIGHT);
+                ofRotateX(app->parameterMap[mediaRotX]);
+                ofRotateY(app->parameterMap[mediaRotY]);
+                ofRotateZ(app->parameterMap[mediaRotZ]);
+                
+                drawNested();
+                
+#ifdef CAMERA
+                if(app->parameterMap[camera]>0 && grabby.isInitialized()){
+                    blendShader.begin();
+//                    int mode = app->parameterMap[blendType];
+                    blendShader.setUniform1i("mode", 0);
+                    blendShader.setUniform1f("thresh", 0.3);
+                    grabby.draw(0, 0, WIDTH, HEIGHT);
+                    blendShader.end();
+                }
+#endif
+                
+            }ofPopMatrix();
             
             if(app->parameterMap[blackCenter]){
                 ofSetColor(ofColor::black);
                 ofCircle(WIDTH/2, HEIGHT2/2, 5*(app->parameterMap[scale]-0.7));
                 ofSetColor(ofColor::white);
             }
-
+            
             ofPopMatrix();
-
+            
             ofRotate(-app->parameterMap[rot]);
             ofRotateX(-app->parameterMap[pitchRot]);
             
             if(!app->parameterMap[noSource]){
-                
-                if (drawImg) {
-                    imgSrc->draw(-imgSrc->width/2, -imgSrc->height/2);
-                    if(!imageUzi)
-                        drawImg = false;
-                }
-                
-                if(drawVid && vidPlayer!=0){
-                    ofEnableBlendMode(OF_BLENDMODE_ADD); //ADD VIDEO SOURCE
-                    //TODO : modulate alpha by brightness ? (in shader)
-                    vidPlayer->draw(-vidPlayer->width/2,-vidPlayer->height/2);
-                    ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-                }
                 
                 if(app->deltaMap[shapeNbPts]>=1)
                     drawShape();
@@ -226,20 +214,9 @@ public:
                     shapeMesh.draw();
                 }
                 if(shapeId != app->deltaMap[shapeNbPts] + app->deltaMap[shapeStyle]*1000) //draw a new shape
-                shapeId = app->deltaMap[shapeNbPts] + app->deltaMap[shapeStyle]*1000;
+                    shapeId = app->deltaMap[shapeNbPts] + app->deltaMap[shapeStyle]*1000;
             }
         }ofPopMatrix();
-        
-//        if(nestedScene!=0){
-//            ofEnableBlendMode(OF_BLENDMODE_ADD);
-//            ofSetColor(ofColor(255,255,255, app->parameterMap[mediaAlpha]*255));
-//            alphaShader.begin();
-//            ofPushMatrix();
-//            nestedScene->draw();
-//            ofPopMatrix();
-//            alphaShader.end();
-//            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-//        }
         
         if(!app->parameterMap[noSource]){
             if (app->deltaMap[feedMode] == MODE_GLITCH)
@@ -297,7 +274,7 @@ public:
         
         ofSetColor(255,255,255);
         src->draw(0,0);
-                
+        
         
         if(app->parameterMap[blackCenter]>=1-BOOL_PARAM_EPSILON){
             ofSetColor(ofColor::black);
@@ -398,7 +375,7 @@ public:
                 ofPopMatrix();
             }
             path.close();
-//            glLineWidth(app->parameterMap[shapeWeight]);
+            //            glLineWidth(app->parameterMap[shapeWeight]);
             for(int i=0;i<app->parameterMap[shapeWeight];i++){
                 ofTranslate(0,1*i);
                 path.draw();
@@ -436,8 +413,13 @@ public:
     void capture(ofFbo* fbo){
         remanentFbo->begin();
         fbo->draw(0,0);
+        drawNested();
+        remanentFbo->end();
+    }
+    
+    void drawNested(){
         if(nestedScene!=0){
-//            blendShader.load("../shaders/blend");
+            //            blendShader.load("../shaders/blend");
             
             int mode = app->parameterMap[blendType];
             if(mode==13)
@@ -453,7 +435,6 @@ public:
             ofPopMatrix();
             blendShader.end();
         }
-        remanentFbo->end();
     }
     
     void mask(){
@@ -468,17 +449,11 @@ public:
         app->deltaMap[rot] = app->parameterMap[rot] ;
         app->parameterMap[pitchRot] += app->deltaMap[pitchRot];
         
-//        if(app->deltaMap[scale]<0.7)     app->deltaMap[scale] = 0.7;
-//        if(app->deltaMap[scale]>2.7)    app->deltaMap[scale] = 2.7;
-        
         app->parameterMap[curShapeRot] += app->parameterMap[shapeRot];
         app->deltaMap[curShapeRot] = app->parameterMap[curShapeRot] ;
-
+        
         if(nestedScene!=0)
             nestedScene->update();
-        
-        if(vidPlayer!=0 && drawVid)
-            vidPlayer->update();
         
         for(int i=0;i<points.size();i++){
             points[i].update();
@@ -493,16 +468,29 @@ public:
                 }else{
                     break;
                 }
-        else
-            while(points.size()<app->parameterMap[nbPoints])
-                points.push_back(EPoint(ofVec3f(ofRandom(WIDTH), ofRandom(HEIGHT), 0), ofRandom(25)));
-    
+                else
+                    while(points.size()<app->parameterMap[nbPoints])
+                        points.push_back(EPoint(ofVec3f(ofRandom(WIDTH), ofRandom(HEIGHT), 0), ofRandom(25)));
+        
         if(shapeMeshNb != app->deltaMap[shapeNbPts])
             updateShape();
-    
+        
+        #ifdef CAMERA
+        if(app->parameterMap[camera] > 0){
+            if(!grabby.isInitialized()){
+                grabby.setVerbose(true);
+                grabby.setDeviceID(int(app->parameterMap[camera]));
+                grabby.initGrabber(WIDTH, HEIGHT);
+                grabby.setVerbose(false);
+            }else{
+                grabby.update();
+            }
+        }
+#endif
+        
     }
     void mousePressed(int x, int y, int button){}
-
+    
     void mouseDragged(int x, int y, int button){
         app->parameterMap[pointx] = x;
         app->parameterMap[pointy] = y;
@@ -540,228 +528,167 @@ public:
         
         float value = eventArgs.value;
         switch(eventArgs.status){
-        case MIDI_CONTROL_CHANGE:{
-            if(eventArgs.channel!=4)
-                return;
-            switch(eventArgs.control){
-            case 1:
-                app->deltaMap[upRot] = 0.01 * 360 *(value-63)/127;
-                break;
-            case 2:
-                app->deltaMap[scale] = 0.7 + 1 * sqrt(value)/sqrt(127);
-                break;
-            case 4:
+            case MIDI_CONTROL_CHANGE:{
+                if(eventArgs.channel!=4)
+                    return;
+                switch(eventArgs.control){
+                    case 1:
+                        app->deltaMap[upRot] = 0.01 * 360 *(value-63)/127;
+                        break;
+                    case 2:
+                        app->deltaMap[scale] = 0.7 + 1 * sqrt(value)/sqrt(127);
+                        break;
+                    case 4:
                         app->parameterMap[offx] = 2*(value-65);
+                        break;
+                    case 5:
+                        app->parameterMap[offy] = 2*(value-65);
+                        break;
+                    case 6 :
+                        app->parameterMap[feedbackRemanence] = value / 127.0;
+                        break;
+                    case 7:
+                        app->parameterMap[nbPoints] = value/127.0*25;
+                        break;
+                    case 8:
+                        app->deltaMap[pitchRot] = 0.5 * 360 *(value-63)/127;
+                        break;
+                    case 9:
+                        app->deltaMap[shapeWeight] = value/127.0*20;
+                        break;
+                    case 12:
+                        app->deltaMap[shapeNbPts]= (int)value/127.0*20;
+                        app->deltaMap[shapeStyle] = HOR;
+                        break;
+                    case 13:
+                        app->parameterMap[shapeWeight] = value/127.0*2;
+                        break;
+                    case 18:
+                        app->parameterMap[mediaAlpha] = value/127.0;
+                        break;
+                    case 19:
+                        app->parameterMap[mediaSaturation] = value/127.0;
+                        break;
+                        
+                    case 71:
+                        app->parameterMap[rot] = app->parameterMap[upRot] = app->deltaMap[upRot] = 0;
+                        break;
+                    case 72:
+                        app->parameterMap[scale] = app->deltaMap[scale]  = 1;
+                        break;
+                    case 35:
+                        app->deltaMap[shapeRot] = 0;
+                        break;
+                    case 77:
+                        app->parameterMap[pitchRot] = app->deltaMap[pitchRot] = 0;
+                        break;
+                    case 91:
+                        app->parameterMap[randomShapeColor] = value>64;
+                        if(app->parameterMap[randomShapeColor])
+                            updateRandomColor();
+                        break;
+                        
+                    default:;
+                }
+            }break;
+            case MIDI_NOTE_ON:{
+                switch(eventArgs.channel){
+                    case 3:case 4:{
+                        switch(eventArgs.pitch){
+                                /** PNG SHAPES **/
+                                /** ALGO SHAPES **/
+                            case 40:
+                                app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==2&&app->deltaMap[shapeStyle]==GEO)?0:2;
+                                app->deltaMap[shapeStyle] = GEO;
+                                updateShape();
+                                break;
+                            case 41:
+                                app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==3&&app->deltaMap[shapeStyle]==GEO)?0:3;
+                                app->deltaMap[shapeStyle] = GEO;
+                                updateShape();
+                                break;
+                            case 42:
+                                app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==4&&app->deltaMap[shapeStyle]==GEO)?0:4;
+                                app->deltaMap[shapeStyle] = GEO;
+                                updateShape();
+                                break;
+                            case 43:
+                                app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==6&&app->deltaMap[shapeStyle]==GEO)?0:6;
+                                app->deltaMap[shapeStyle] = GEO;
+                                updateShape();
+                                break;
+                            case 47:
+                                app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==666&&app->deltaMap[shapeStyle]==GEO)?0:666;
+                                app->deltaMap[shapeStyle] = GEO;
+                                break;
+                            case 36:
+                                app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==1&&app->deltaMap[shapeStyle]==HOR)?0:1;
+                                app->deltaMap[shapeStyle] = HOR;
+                                break;
+                            case 36+1:
+                                app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==2&&app->deltaMap[shapeStyle]==HOR)?0:2;
+                                app->deltaMap[shapeStyle] = HOR;
+                                break;
+                            case 36+2:
+                                app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==3&&app->deltaMap[shapeStyle]==HOR)?0:3;
+                                app->deltaMap[shapeStyle] = HOR;
+                                break;
+                            case 36+3:
+                                app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==3&&app->deltaMap[shapeStyle]==HOR)?0:4;
+                                app->deltaMap[shapeStyle] = HOR;
+                                break;
+                                
+                            case 44:case 44+16:case 44+32:
+                                app->deltaMap[feedMode] = MODE_GLITCH;
+                                break;
+                                
+                            case 45:case 45+16:case 45+32:
+                                app->deltaMap[backMask] = !app->deltaMap[backMask];
+                                break;
+                                
+                                
+                            case 50:case 50+16:case 50+32:
+                                app->parameterMap[f_strobe] = !app->parameterMap[f_strobe];
+                                break;
+                            case 48:case 48+16:case 48+32:
+                                app->deltaMap[erode] = app->parameterMap[erode] = true;
+                                break;
+                            case 49:case 49+16:case 49+32:
+                                app->parameterMap[noSource] = true;
+                                break;
+                            case 46:{
+                                if(shapeMesh.getNumVertices()>0)
+                                    shapeMesh.clear();
+                                else
+                                    events.push_back("randomShape");
+                            } break;
+                        }
+                    }
+                        break;
+                }
                 break;
-            case 5:
-                app->parameterMap[offy] = 2*(value-65);
-                break;
-            case 6 :
-                app->parameterMap[feedbackRemanence] = value / 127.0;
-                break;
-            case 7:
-                app->parameterMap[nbPoints] = value/127.0*25;
-                break;
-            case 8:
-                app->deltaMap[pitchRot] = 0.5 * 360 *(value-63)/127;
-                break;
-                case 9:
-                    app->deltaMap[shapeWeight] = value/127.0*20;
-                    break;
-            case 12:
-                app->deltaMap[shapeNbPts]= (int)value/127.0*20;
-                app->deltaMap[shapeStyle] = HOR;
-                break;
-            case 13:
-                app->parameterMap[shapeWeight] = value/127.0*2;
-                break;
-            case 18:
-                app->parameterMap[mediaAlpha] = value/127.0;
-                break;
-            case 19:
-                app->parameterMap[mediaSaturation] = value/127.0;
-                break;
-
-            case 71:
-                app->parameterMap[rot] = app->parameterMap[upRot] = app->deltaMap[upRot] = 0;
-                break;
-            case 72:
-                app->parameterMap[scale] = app->deltaMap[scale]  = 1;
-                break;
-            case 35:
-                app->deltaMap[shapeRot] = 0;
-                break;
-            case 77:
-                app->parameterMap[pitchRot] = app->deltaMap[pitchRot] = 0;
-                break;
-            case 91:
-                app->parameterMap[randomShapeColor] = value>64;
-                if(app->parameterMap[randomShapeColor])
-                    updateRandomColor();
-                break;
-
+            }
+            case MIDI_NOTE_OFF:{
+                switch(eventArgs.channel){
+                    case 3:case 4:{
+                        switch(eventArgs.pitch) {
+                            case 44:case 44+16:case 44+32:
+                                app->deltaMap[feedMode] = MODE_FEEDBACK;
+                                break;
+                            case 49:case  49+16:case  49+32:
+                                app->parameterMap[noSource] = false;
+                                break;
+                            case 48:case 48+16:case 48+32:
+                                app->deltaMap[erode] = app->parameterMap[erode] = false;//fade out
+                                break;
+                            default:;
+                        }
+                    }
+                        break;
+                }
             default:;
             }
-        }break;
-        case MIDI_NOTE_ON:{
-            switch(eventArgs.channel){
-            case 3:case 4:{
-                switch(eventArgs.pitch){
-                /** PNG SHAPES **/
-                case 52:
-                    imgChoice = 8;
-                    events.push_back("changeImage");
-                    imageUzi=true;
-                    break;
-                case 53:
-                    imgChoice = 7;
-                    events.push_back("changeImage");
-                    imageUzi=true;
-                    break;
-                case 54:
-                    imgChoice = 2;
-                    events.push_back("changeImage");
-                    imageUzi=true;
-                    break;
-                case 55:
-                    imgChoice = 3;
-                    events.push_back("changeImage");
-                    imageUzi=true;
-                    break;
-
-
-                    /** ALGO SHAPES **/
-                case 56:
-                    imgChoice = 5;
-                    events.push_back("changeImage");
-                    imageUzi=true;
-                    break;
-                case 57:
-                    imgChoice = 6;
-                    events.push_back("changeImage");
-                    imageUzi=true;
-                    break;
-
-                case 40:
-                    app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==2&&app->deltaMap[shapeStyle]==GEO)?0:2;
-                    app->deltaMap[shapeStyle] = GEO;
-                    updateShape();
-                    break;
-                case 41:
-                    app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==3&&app->deltaMap[shapeStyle]==GEO)?0:3;
-                    app->deltaMap[shapeStyle] = GEO;
-                    updateShape();
-                    break;
-                case 42:
-                    app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==4&&app->deltaMap[shapeStyle]==GEO)?0:4;
-                    app->deltaMap[shapeStyle] = GEO;
-                    updateShape();
-                    break;
-                case 43:
-                    app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==6&&app->deltaMap[shapeStyle]==GEO)?0:6;
-                    app->deltaMap[shapeStyle] = GEO;
-                    updateShape();
-                    break;
-                case 47:
-                    app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==666&&app->deltaMap[shapeStyle]==GEO)?0:666;
-                    app->deltaMap[shapeStyle] = GEO;
-                    break;
-                case 36:
-                    app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==1&&app->deltaMap[shapeStyle]==HOR)?0:1;
-                    app->deltaMap[shapeStyle] = HOR;
-                    break;
-                case 36+1:
-                    app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==2&&app->deltaMap[shapeStyle]==HOR)?0:2;
-                    app->deltaMap[shapeStyle] = HOR;
-                    break;
-                case 36+2:
-                    app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==3&&app->deltaMap[shapeStyle]==HOR)?0:3;
-                    app->deltaMap[shapeStyle] = HOR;
-                    break;
-                case 36+3:
-                    app->deltaMap[shapeNbPts] = (app->deltaMap[shapeNbPts]==3&&app->deltaMap[shapeStyle]==HOR)?0:4;
-                    app->deltaMap[shapeStyle] = HOR;
-                    break;
-
-                case 44:case 44+16:case 44+32:
-                    app->deltaMap[feedMode] = MODE_GLITCH;
-                    break;
-
-                case 45:case 45+16:case 45+32:
-                    app->deltaMap[backMask] = !app->deltaMap[backMask];
-                    break;
-
-
-                case 50:case 50+16:case 50+32:
-                    app->parameterMap[f_strobe] = !app->parameterMap[f_strobe];
-                    break;
-                case 48:case 48+16:case 48+32:
-                    app->deltaMap[erode] = app->parameterMap[erode] = true;
-                    break;
-                case 49:case 49+16:case 49+32:
-                    app->parameterMap[noSource] = true;
-                    break;
-                    case 46:{
-                        if(shapeMesh.getNumVertices()>0)
-                            shapeMesh.clear();
-                        else
-                    events.push_back("randomShape");
-                    } break;
-                }
-            }
-                break;
-            }
-            break;
         }
-        case MIDI_NOTE_OFF:{
-            switch(eventArgs.channel){
-                case 3:case 4:{
-                switch(eventArgs.pitch) {
-                case 44:case 44+16:case 44+32:
-                    app->deltaMap[feedMode] = MODE_FEEDBACK;
-                    break;
-                case 49:case  49+16:case  49+32:
-                    app->parameterMap[noSource] = false;
-                    break;
-                case 48:case 48+16:case 48+32:
-                    app->deltaMap[erode] = app->parameterMap[erode] = false;//fade out
-                    break;
-                case 36:
-                case 36+16:
-                case 37:
-                case 37+16:
-                case 38:
-                case 38+16:
-                case 39:
-                case 39+16:
-                case 40:
-                case 40+16:
-                case 41:
-                case 41+16:
-                case 42:
-                case 43:
-                case 42+16:
-                case 43+16:
-                    imageUzi=false;
-                    break;
-                default:;
-                }
-            }
-                break;
-            }
-        default:;
-            }
-        }
-    }
-    
-    void loadDirectImage(string path){
-        events.push_back("changeImage");
-        imageUzi=true;
-        ofImage img;
-        img.loadImage(path);
-        img.resize(WIDTH,HEIGHT);
-        imgs.push_back(img);
-        imgChoice = imgs.size()-1;
     }
     
     void loadImgs() {
@@ -773,9 +700,9 @@ public:
             im.resize(WIDTH, HEIGHT);
             imgs.push_back(im);
         }
-
-            circleMask.loadImage("assets/maskCircle1280x720.png");
-
+        
+        circleMask.loadImage("assets/maskCircle1280x720.png");
+        
         circleMask.resize(app->FINALWIDTH, app->FINALHEIGHT);
     }
     
@@ -785,14 +712,14 @@ public:
     
     void keyPressed(int key){
         switch(key){
-        case ' ':
+            case ' ':
                 updateShape();
-            break;
-        case 'c':{
-            app->parameterMap[randomShapeColor] = !app->parameterMap[randomShapeColor];
-            if(app->parameterMap[randomShapeColor])
-                updateRandomColor();
-        } break;
+                break;
+            case 'c':{
+                app->parameterMap[randomShapeColor] = !app->parameterMap[randomShapeColor];
+                if(app->parameterMap[randomShapeColor])
+                    updateRandomColor();
+            } break;
         }
     }
     
@@ -814,18 +741,18 @@ public:
     
     
     void loadMacro(ofXml *xml){
-//        remanentFbo->begin();
-//        ofBackground((0));
-//        remanentFbo->end();
+        //        remanentFbo->begin();
+        //        ofBackground((0));
+        //        remanentFbo->end();
         //if(!xml-> .getAttribute("version").compare("v2")){
-
-//            for(int ch=0;ch<xml->getNumChildren();ch++){
-//                xml->setToChild(0);
-//                float v = xml->getFloatValue();
-//                app->parameterMap[xml->getName()] = v;
-//                app->deltaMap[xml->getName()] = v;
-//                xml->setToParent();
-//            }
+        
+        //            for(int ch=0;ch<xml->getNumChildren();ch++){
+        //                xml->setToChild(0);
+        //                float v = xml->getFloatValue();
+        //                app->parameterMap[xml->getName()] = v;
+        //                app->deltaMap[xml->getName()] = v;
+        //                xml->setToParent();
+        //            }
         
         updateShape();
     }
@@ -852,22 +779,19 @@ public:
     
 public:
     ofFbo* source,*source2;
-
+    
     ofImage* img;
     ofImage* imgSrc;
     ofFbo* remanentFbo;
     ofImage circleMask;
     vector<ofImage> imgs;
     int imgChoice=0;
-
+    
     vector<string> events;
-    bool imageUzi = false;
-    bool drawImg = false, drawVid = false;
     
     string crtImgPath = "",crtVidPath="";
     ofImage crtImg;
     ofShader shader, invertShader,erodeShader, hBackShader;
-    ofVideoPlayer* vidPlayer=0;
     
     //SHAPES
     ofMesh shapeMesh;
@@ -881,6 +805,10 @@ public:
     ofShader alphaShader, blendShader;
     
     int shapeId = 0;
+    
+    #ifdef CAMERA
+    ofVideoGrabber grabby;
+#endif
 };
 
 #endif /* defined(__emptyExample__Feedback__) */

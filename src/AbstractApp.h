@@ -18,7 +18,6 @@ class AbstractApp
 public:
     
     ofColor getRandomColor(){
-//        cout << "hsb " << parameterMap[tintCenter]*255 << " " << ofRandom(-parameterMap[tintAmp]/2.0, parameterMap[tintAmp]/2.0)*255.0f << " " <<endl;
         return ofColor::fromHsb(fmod(parameterMap[tintCenter]*255 + ofRandom(-parameterMap[tintAmp]/2.0, parameterMap[tintAmp]/2.0)*255.0f + 255.0f, 255.0f), parameterMap[sidesSaturation]*255, 255);
     }
     
@@ -46,12 +45,10 @@ public:
         parameterNameMap["omg3D2Speed"]=omg3D2Speed;
         parameterNameMap["omg3D2FreeRotation"]=omg3D2FreeRotation;
         parameterNameMap["omg3D2AvoidCenter"]=omg3D2AvoidCenter;
-        parameterNameMap["ball"]=ball;
         parameterNameMap["thresholdAfterBall"]=thresholdAfterBall;
         parameterNameMap["kinectScale"]=kinectScale;
         parameterNameMap["kinectMasking"]=kinectMasking;
         parameterNameMap["glowResolution"]=glowResolution;
-        parameterNameMap["glowIntensity"]=glowIntensity;
         parameterNameMap["randHHide"]=randHHide;
         parameterNameMap["randVHide"]=randVHide;
         parameterNameMap["glow"]=glow;
@@ -79,10 +76,7 @@ public:
         parameterNameMap["lineDx"]=lineDx;
         parameterNameMap["blendType"]=blendType;
         parameterNameMap["flash"]=flash;
-        parameterNameMap["triumMode"]=triumMode;
-        parameterNameMap["triumSpace1"]=triumSpace1;
-        parameterNameMap["triumSpace2"]=triumSpace2;
-        parameterNameMap["triumSpace3"]=triumSpace3;
+        parameterNameMap["camera"]=camera;
         parameterNameMap["warp"]=warp;
         parameterNameMap["mediaX"]=mediaX;
         parameterNameMap["mediaY"]=mediaY;
@@ -93,8 +87,12 @@ public:
         parameterNameMap["paint"]=paint;
         parameterNameMap["multiFbos"]=multiFbos;
         parameterNameMap["tintSaturation"]=tintSaturation;
+        parameterNameMap["saturation"]=tintSaturation;
         parameterNameMap["tintHue"]=tintHue;
+        parameterNameMap["hue"]=tintHue;
+        parameterNameMap["gradient"]=gradient;
         parameterNameMap["tintBrightness"]=tintBrightness;
+        parameterNameMap["brightness"]=tintBrightness;
         parameterNameMap["map_mask"]=map_mask;
         parameterNameMap["tintCenter"]=tintCenter;
         parameterNameMap["tintAmp"]=tintAmp;
@@ -126,8 +124,10 @@ public:
         parameterNameMap["displaceVAmp"]=displaceVAmp;
         parameterNameMap["displaceProba"]=displaceProba;
         parameterNameMap["chromaOffset"]=chromaOffset;
-        parameterNameMap["chromasepAngle"]=chromasepAngle;
-        parameterNameMap["chromasepHue"]=chromasepHue;
+        parameterNameMap["chromaSepAngle"]=chromaSepAngle;
+        parameterNameMap["chromasepAngle"]=chromaSepAngle;
+        parameterNameMap["chromaSepHue"]=chromaSepHue;
+        parameterNameMap["chromasepHue"]=chromaSepHue;
         parameterNameMap["chromaSep"]=chromaSep;
         parameterNameMap["chromaSepAlpha"]=chromaSepAlpha;
         parameterNameMap["doubleChromaSep"]=doubleChromaSep;
@@ -151,9 +151,9 @@ public:
         parameterNameMap["omg3D2Nb"]=omg3D2Nb;
         parameterNameMap["kaleiCopy"]=kaleiCopy;
         parameterNameMap["kaleiCopyAdjust"]=kaleiCopyAdjust;
-        parameterNameMap["warpRemap"]=warpRemap;
-        parameterNameMap["warpX"]=warpX;
-        parameterNameMap["warpY"]=warpY;
+//        parameterNameMap["warpRemap"]=warpRemap;
+//        parameterNameMap["warpX"]=warpX;
+//        parameterNameMap["warpY"]=warpY;
         parameterNameMap["stressTest"]=stressTest;
         parameterNameMap["stressTestRate"]=stressTestRate;
         parameterNameMap["reSaturate"]=reSaturate;
@@ -232,7 +232,6 @@ public:
         parameterNameMap["movieSpeed"]=movieSpeed;
         parameterNameMap["transluscentUzi"]=transluscentUzi;
         parameterNameMap["gamma"]=_gamma;
-        parameterNameMap["brightness"]=brightness;
         parameterNameMap["adjust"]=adjust;
         parameterNameMap["loopLength"]=loopLength;
         parameterNameMap["loopStart"]=loopStart;
@@ -308,8 +307,6 @@ public:
         parameterNameMap["map_sync"]=map_sync;
         parameterNameMap["map_pace"]=map_pace;
         parameterNameMap["map_prog"]=map_prog;
-        parameterNameMap["skewAmpMidi"]=skewAmpMidi;
-        parameterNameMap["skewVAmpMidi"]=skewVAmpMidi;
         parameterNameMap["audioGain"]=audioGain;
         parameterNameMap["evolution"]=evolution;
         parameterNameMap["kinect"]=kinect;
@@ -343,8 +340,8 @@ public:
         parameterNameMap["pertPersistance"] = pertPersistance;
         parameterNameMap["pertFreq"] = pertFreq;
         parameterNameMap["glitchFreq"] = glitchFreq;
-        parameterNameMap["aDivergence"] = aDivergence;
         parameterNameMap["omg3D2ADivergence"] = aDivergence;
+        parameterNameMap["aDivergence"] = aDivergence; //alias
         parameterNameMap["ledAuto"] = ledAuto;
         parameterNameMap["fadeOutMode"] = fadeOutMode;
         parameterNameMap["pertEvoAuto"] = pertEvoAuto;
@@ -361,12 +358,122 @@ public:
         parameterNameMap["whitePoint"] = whitePoint;
         parameterNameMap["blackPoint"] = blackPoint;
         parameterNameMap["pertMode"] = pertMode;
+        parameterNameMap["oscIn"] = oscIn;
 //        parameterNameMap["pertMode"] = pertMode;
 //        parameterNameMap["pertMode"] = pertMode;
 
         parameterIDMap.resize(N_PARAM);
         for(map<string,int>::iterator it=parameterNameMap.begin();it!=parameterNameMap.end();it++)
             parameterIDMap[it->second] = it->first;
+        
+        parametersInGUI.push_back(mediaX);
+        parametersInGUIBounds.push_back(ofVec2f(-1, 1));
+        parametersInGUI.push_back(mediaY);
+        parametersInGUIBounds.push_back(ofVec2f(-1, 1));
+        parametersInGUI.push_back(mediaZ);
+        parametersInGUIBounds.push_back(ofVec2f(-1, 1));
+        parametersInGUI.push_back(mediaRotX);
+        parametersInGUIBounds.push_back(ofVec2f(-180, 180));
+        parametersInGUI.push_back(mediaRotY);
+        parametersInGUIBounds.push_back(ofVec2f(-180, 180));
+        parametersInGUI.push_back(mediaRotZ);
+        parametersInGUIBounds.push_back(ofVec2f(-180, 180));
+        parametersInGUI.push_back(omg3D);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(omg3D2);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(omg3D2Dist);
+        parametersInGUIBounds.push_back(ofVec2f(0, 2));
+        parametersInGUI.push_back(omg3D2Depth);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(omg3D2Nb);
+        parametersInGUIBounds.push_back(ofVec2f(2, 50));
+        parametersInGUI.push_back(omg3D2Rotation);
+        parametersInGUIBounds.push_back(ofVec2f(-720, 720));
+        parametersInGUI.push_back(omg3D2Speed);
+        parametersInGUIBounds.push_back(ofVec2f(-0.1, 0.1));
+        parametersInGUI.push_back(divergence);
+        parametersInGUIBounds.push_back(ofVec2f(-1, 1));
+        parametersInGUI.push_back(aDivergence);
+        parametersInGUIBounds.push_back(ofVec2f(-1, 1));
+        parametersInGUI.push_back(omg3D2X);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(omg3D2Y);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(omg3D2x2);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(bw);
+        parametersInGUIBounds.push_back(ofVec2f(-10, 10));
+        parametersInGUI.push_back(tintHue);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(gradient);
+        parametersInGUIBounds.push_back(ofVec2f(-1, 1));
+        parametersInGUI.push_back(_reTint);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(tintSaturation);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(_gamma);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(contrast);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(sharpen);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(_invert);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(blackPoint);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(whitePoint);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(chromaSep);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(chromaSepHue);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(sobel);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(sobelMix);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(glow);
+        parametersInGUIBounds.push_back(ofVec2f(0, 10));
+        parametersInGUI.push_back(mandala);
+        parametersInGUIBounds.push_back(ofVec2f(0, 15));
+        parametersInGUI.push_back(toCircle);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(warp);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(toLine);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(hblur);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(vblur);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(xpixellate);
+        parametersInGUIBounds.push_back(ofVec2f(0, 100));
+        parametersInGUI.push_back(ypixellate);
+        parametersInGUIBounds.push_back(ofVec2f(0, 100));
+        parametersInGUI.push_back(kalei);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(kaleiNb);
+        parametersInGUIBounds.push_back(ofVec2f(0, 12));
+        parametersInGUI.push_back(nFreeze);
+        parametersInGUIBounds.push_back(ofVec2f(0, 25));
+        parametersInGUI.push_back(displaceAmp);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(displaceVAmp);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(displaceProba);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(skewAmp);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(skewVAmp);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(pert);
+        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+        parametersInGUI.push_back(pertEvoAuto);
+        parametersInGUIBounds.push_back(ofVec2f(0, 0.1));
+        parametersInGUI.push_back(paint);
+        parametersInGUIBounds.push_back(ofVec2f(0, 10));
+        parametersInGUI.push_back(echoNb);
+        parametersInGUIBounds.push_back(ofVec2f(0, 10));
     }
     
     void initParameters();
@@ -403,7 +510,7 @@ public:
     bool liveMode = false;
     bool dualDisplay = false;
     
-    int NB_PAINT_FRAMES = 5;
+    int NB_PAINT_FRAMES = 1;
     
     bool pause = false;
 
@@ -412,6 +519,9 @@ public:
     float parameterEasingMap[N_PARAM];
      std::map<string, int> parameterNameMap;
      std::vector<string> parameterIDMap;
+    
+    std::vector<int> parametersInGUI;
+    std::vector<ofVec2f> parametersInGUIBounds;
     
     vector<int> stressTestFilterList;
     
@@ -422,7 +532,7 @@ public:
     int lastGlitchDate = 0;
     bool doGlitches = false;
     
-    float restrictFrameRate = 100;
+    float restrictFrameRate = 30;
     
     bool savingGif = false;
 

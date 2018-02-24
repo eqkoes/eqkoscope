@@ -12,8 +12,8 @@ using namespace std;
 
 static ofEasyCam cam;
 static ofMesh sphereMesh;
-static ofShader triumShader,alphaShader, skewShader, displaceShader, pixelShader, noiseShader,sobelShader, gBlurHor, hdrShader, sInvert, kShader, chromaShader,circleShader, displaceGlitchShader, lsdShader, perturbationShader,dualShader;
-static ofFbo tunnelFbo;
+static ofShader triumShader,alphaShader, skewShader, displaceShader, pixelShader, noiseShader,sobelShader, gBlurHor, hdrShader, sInvert, kShader, chromaShader,circleShader, displaceGlitchShader, lsdShader, perturbationShader,dualShader, chromaSepShader;
+static ofFbo tunnelFbo, tmpTunnelFbo;
 static ofImage iii;
 
 static AbstractApp* app;
@@ -26,6 +26,92 @@ static int MAX_OMG3D2_FBOS = 25;
 
 static ofImage sortImage;
 
+
+static ofMesh tunnelMesh;
+static int tunnelMeshOffset = 0;
+static ofMesh tunnelMesh2;
+
+static void tunnelMeshDistort(ofFbo* src, ofFbo* dest){
+    int n = app->parameterMap[omg3D2Nb];
+    float r2 = HEIGHT/2 * 0.9;
+    float r1 = HEIGHT/2 * 0.5;
+    
+//    tunnelMesh.setMode(OF_PRIMITIVE_LINE_STRIP);
+    float offset = ofGetFrameNum() / 100.0;
+    float res = 200;
+    
+    for(int i=0;i<tunnelMesh.getVertices().size();i++){
+        ofVec3f v = tunnelMesh.getVertex(i);
+        v.z += HEIGHT * app->parameterMap[omg3D2Speed];
+        if(v.z > 1 * HEIGHT){
+            v.z -= 8 * HEIGHT/2;
+        }
+        tunnelMesh.setVertex(i, v);
+    }
+    
+    
+    res = n*3;
+    r2 = HEIGHT/2 * 0.02;
+    r1 = HEIGHT/2 * 0.02;
+    tunnelMesh2.clear();
+    for(int i=0;i<res;i++){
+//        for(int j=0;j<res2;j++){
+        float z = 1.5*HEIGHT - 15 * HEIGHT/2 * i / res + std::fmod(offset* 100000 * app->parameterMap[omg3D2Speed], (HEIGHT/2));
+        float z2 = 1.5*HEIGHT - 15 * HEIGHT/2 * (i+res/n) / res + std::fmod(offset*500, (HEIGHT/2));
+        float x = cos( n *2*M_PI*i/res + offset);
+        float y = sin( n *2*M_PI*i/res + offset);
+        tunnelMesh2.addVertex(ofVec3f(WIDTH/2 + r2*x + 0*(ofNoise(z*10, 1) - 0.5),
+                                     HEIGHT/2 + r2*y + 0*(ofNoise(1, z*10) - 0.5),
+                                     z * app->parameterMap[omg3D2Dist]));
+        tunnelMesh2.addVertex(ofVec3f(WIDTH/2 + r1*x + 0*(ofNoise(z2*10, 1) - 0.5),
+                                     HEIGHT/2  + r1*y + 0*(ofNoise(1, z2*10) - 0.5),
+                                     z2 * app->parameterMap[omg3D2Dist]
+                                     ));
+        tunnelMesh2.addTexCoord(ofVec2f( int(WIDTH * n*i/(res) * (360+app->parameterMap[omg3D2Rotation])/360.0 ) % WIDTH, HEIGHT));
+        tunnelMesh2.addTexCoord(ofVec2f( int(WIDTH * n*i/(res) * (360+app->parameterMap[omg3D2Rotation])/360.0 ) % WIDTH, 0));
+//    }
+    }
+
+    ofPushMatrix();
+    ofRotateZ(app->parameterMap[rot]);
+    ofTranslate(WIDTH/2, HEIGHT/2);
+    dest->begin();
+    ofBackground(0);
+    ofRotateX(15*(ofNoise(1, ofGetFrameNum()/250.0*(1+app->parameterMap[user1]))-0.5));
+    ofRotateY(15*(ofNoise(ofGetFrameNum()/250.0*(1+app->parameterMap[user1]), 1)-0.5));
+    src->getTextureReference().bind();
+    tunnelMesh.draw();
+    tunnelMesh2.draw();
+    src->getTextureReference().unbind();
+    dest->end();
+    ofPopMatrix();
+}
+
+static void initTunnel(){
+    tunnelMesh.setMode(OF_PRIMITIVE_TRIANGLE_STRIP);
+    tunnelMesh2.setMode(OF_PRIMITIVE_TRIANGLE_STRIP);
+    tunnelMesh.clear();
+    int n = app->parameterMap[omg3D2Nb];
+    float r2 = HEIGHT/2 * 0.9;
+    float r1 = HEIGHT/2 * 0.5;
+    tunnelMesh.setMode(OF_PRIMITIVE_TRIANGLE_STRIP);
+    tunnelMesh.clear();
+    //    tunnelMesh.setMode(OF_PRIMITIVE_LINE_STRIP);
+    float offset = ofGetFrameNum() / 100.0;
+    float res = 200;
+    for(int i=0;i<res;i++){
+        float z = HEIGHT - 15 * HEIGHT/2 * i / res + std::fmod(offset* 100000 * app->parameterMap[omg3D2Speed], (HEIGHT/2));
+        float z2 = HEIGHT - 15 * HEIGHT/2 * (i+res/n) / res + std::fmod(offset*500, (HEIGHT/2));
+        float x = cos( n *2*M_PI*i/res + offset);
+        float y = sin( n *2*M_PI*i/res + offset);
+        tunnelMesh.addVertex(ofVec3f(WIDTH/2 + r2*x, HEIGHT/2 + r2*y, z * app->parameterMap[omg3D2Dist]));
+        //tunnelMesh.addVertex(ofVec3f(WIDTH/2 + r1*x, HEIGHT/2  + r1*y, z * app->parameterMap[omg3D2Dist]));
+                tunnelMesh.addVertex(ofVec3f(WIDTH/2 + r1*x, HEIGHT/2  + r1*y, z2 * app->parameterMap[omg3D2Dist]));
+        tunnelMesh.addTexCoord(ofVec2f( int(WIDTH * n*i/(res) * (360+app->parameterMap[omg3D2Rotation])/360.0 ) % WIDTH, HEIGHT));
+        tunnelMesh.addTexCoord(ofVec2f( int(WIDTH * n*i/(res) * (360+app->parameterMap[omg3D2Rotation])/360.0 ) % WIDTH, 0));
+    }
+
+}
 
 static void sphere(ofFbo* src, ofFbo* dest){
     dest->begin();
@@ -73,7 +159,7 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
         nb /= 2;
     nb = (int) nb;
     int MINDIST = 800;
-    int MAXDIST = 4000*internalDist;
+    int MAXDIST = 4000;//*internalDist;
     
     
     if(zs[o_index].size() != (int) nb){ //init //TODO reset zs on macro load ?
@@ -191,14 +277,14 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
             float z = zs[o_index][i].z;
                 if(add==1)
                     z = 1 - z;
-             z = (z*(MINDIST + MAXDIST) - MAXDIST - MINDIST*(1-app->parameterMap[omg3D2Depth])) * intensity;
+             z = (z*(MINDIST + MAXDIST) - MAXDIST - MINDIST*(1-app->parameterMap[omg3D2Depth])) * intensity * internalDist;
                 
                 
             if(app->parameterMap[omg3D2X]){
-                x +=  (zs[o_index][i].z-0.5)*WIDTH*nb/2.5*intensity;
+                x +=  (zs[o_index][i].z-0.5)*WIDTH/2.0*intensity*app->parameterMap[omg3D2X];
             }
             if(app->parameterMap[omg3D2Y]){
-                y +=  (zs[o_index][i].z-0.5)*HEIGHT*nb/2.5*intensity;
+                y +=  (zs[o_index][i].z-0.5)*HEIGHT/(2.0)*intensity*app->parameterMap[omg3D2Y];
             }
 
             ofTranslate(x, y, z);
@@ -259,39 +345,105 @@ static void displayOmg3D2(ofFbo* src, ofFbo* dest, bool closeEasing, float speed
     ofEnableBlendMode(OF_BLENDMODE_ALPHA);
 }
 
-static void tunnel(ofFbo* src, ofFbo* dest,  bool closeEasing, float speed, bool pastFbos,
-                   float rotation, float internalDist, bool symetry, bool freeRotation){
+static void colorGrading(ofFbo* src, ofFbo* dest, bool invert, float tintAmp, float reTint, float sidesSaturation){
     
-//    dualShader.load("../shaders/dual");
+    dest->begin();
+    chromaShader.begin();
+    chromaShader.setUniform1f("WIDTH", WIDTH);
+    chromaShader.setUniform1f("HEIGHT", HEIGHT2);
+    chromaShader.setUniform1f("intensity", 0);
+    chromaShader.setUniform1f("sepAlpha", app->parameterMap[chromaSepAlpha]);
+    chromaShader.setUniform1f("hue", app->parameterMap[tintHue]);
+    chromaShader.setUniform1f("gradient", app->parameterMap[gradient]);
+    chromaShader.setUniform1f("reSaturate", app->parameterMap[reSaturate]);
+    //chromaShader.setUniform1f("saturation", app->parameterMap[tintSaturation]*200 /255.0);
+    chromaShader.setUniform1f("sidesSaturation", sidesSaturation);
+    chromaShader.setUniform1f("reTint", reTint);
+    src->draw(0,0);
+    chromaShader.end();
+    dest->end();
+}
+
+static void chromaSeparation(ofFbo* src, ofFbo* dest, bool invert, float chromaSep, float chromasepHue, float chromasepAngle, float chromaOffset, float sidesSaturation){
+//    chromaShader.load("../shaders/chromaSep");
+//    chromaSepShader.load("../shaders/chromaSepOnly");
+    dest->begin();
+    chromaSepShader.begin();
+    chromaSepShader.setUniform1f("WIDTH", WIDTH);
+    chromaSepShader.setUniform1f("HEIGHT", HEIGHT2);
+    chromaSepShader.setUniform1f("intensity", chromaSep);
+    chromaSepShader.setUniform1f("sepAlpha", app->parameterMap[chromaSepAlpha]);
+    float csHue = chromasepHue;
+    if(tintAmp<1)
+        csHue = ofMap(chromasepHue/255-app->parameterMap[tintHue], 0, 1, app->parameterMap[tintCenter] - app->parameterMap[int(tintAmp)]/2, app->parameterMap[tintCenter] + app->parameterMap[int(tintAmp)]/2)*255;
+    chromaSepShader.setUniform1f("chromasepHue", csHue);
+    chromaSepShader.setUniform1f("chromaOffset", chromaOffset);
+    chromaSepShader.setUniform1f("chromasepAngle", chromasepAngle);
+    chromaSepShader.setUniform1f("chromaSepMode", app->parameterMap[chromaSepMode]);
+    chromaSepShader.setUniform1f("sidesSaturation", sidesSaturation);
+    src->draw(0,0);
+    chromaSepShader.end();
+    dest->end();
+}
+
+
+static void tunnel(ofFbo* src, ofFbo* dest,  bool closeEasing, float speed, bool pastFbos, float rotation, float internalDist, bool symetry, bool freeRotation){
 
     float a = -7;
     
-    ofPushMatrix();
-//    ofRotateY(a);
-    displayOmg3D2(src, &tunnelFbo, closeEasing, speed, pastFbos, rotation, internalDist, symetry, freeRotation, a, 0);
-    ofPopMatrix();
+    tunnelFbo.begin();
+    ofBackground(0);
+    tunnelFbo.end();
     
+    tmpTunnelFbo.begin();
+    ofBackground(0);
+    tmpTunnelFbo.end();
+    
+    ofPushMatrix();
+    app->parameterMap[tintHue] = 0;
+    displayOmg3D2(src, &tmpTunnelFbo, closeEasing, speed/3, pastFbos, rotation, internalDist, symetry, freeRotation, a, 0);
+    ofPopMatrix();
+
+    ofSetColor(ofColor::white);
     dest->begin();
-    dualShader.begin();
-    dualShader.setUniform1f("left", 1);
-    dualShader.setUniform1f("WIDTH", WIDTH);
+    ofBackground(0);
+    tmpTunnelFbo.draw(0,0);
+    dest->end();
+    
+
+    ofPushMatrix();
+    ofRotateY(a); //cyan
+    displayOmg3D2(src, &tmpTunnelFbo, closeEasing, speed/3, pastFbos, rotation, internalDist, symetry, freeRotation, a, 0);
+    ofPopMatrix();
+    ofSetColor(ofColor::white);
+
+    app->parameterMap[reSaturate] = 1;
+    app->parameterMap[tintHue] = 0.5;
+        colorGrading(&tmpTunnelFbo, &tunnelFbo, 0, 0, 1, 0);
+    dest->begin();
+//    dualShader.begin();
+//    dualShader.setUniform1f("left", 1);
+//    dualShader.setUniform1f("WIDTH", WIDTH);
     tunnelFbo.draw(0,0);
-    dualShader.end();
+//    dualShader.end();
     dest->end();
 
     ofPushMatrix();
-    ofRotateY(-a);
-    displayOmg3D2(src, &tunnelFbo, closeEasing, speed, pastFbos, rotation, internalDist, symetry, freeRotation, -a, 0);
+    ofRotateY(-a); //red
+    displayOmg3D2(src, &tmpTunnelFbo, closeEasing, speed/3, pastFbos, rotation, internalDist, symetry, freeRotation, -a, 0);
     ofPopMatrix();
-    
+    ofSetColor(ofColor::white);
+
+    colorGrading(&tmpTunnelFbo, &tunnelFbo, 0, 0.5, 1, 0);
     dest->begin();
-    dualShader.begin();
-    dualShader.setUniform1f("left", 0);
-    dualShader.setUniform1f("WIDTH", WIDTH);
+//    dualShader.begin();
+//    dualShader.setUniform1f("left", 0);
+//    dualShader.setUniform1f("WIDTH", WIDTH);
     tunnelFbo.draw(0,0);
-    dualShader.end();
+//    dualShader.end();
     dest->end();
     
+    app->parameterMap[reSaturate] = 0;
 }
 
 static void displayOmg3D(ofFbo* src, ofFbo* dest){
@@ -401,9 +553,9 @@ static void doLSD(ofFbo* src, ofFbo* dest){
     dest->begin();
     lsdShader.begin();
     lsdShader.setUniform1f("intensity", app->parameterMap[warp]);
-    lsdShader.setUniform1f("remap", app->parameterMap[warpRemap]);
-    lsdShader.setUniform1f("cx", app->parameterMap[warpX]);
-    lsdShader.setUniform1f("cy", app->parameterMap[warpY]);
+    lsdShader.setUniform1f("remap", 1);
+//    lsdShader.setUniform1f("cx", app->parameterMap[warpX]);
+//    lsdShader.setUniform1f("cy", app->parameterMap[warpY]);
     lsdShader.setUniform1f("WIDTH", WIDTH);
     lsdShader.setUniform1f("HEIGHT", HEIGHT);
     src->draw(0,0);
@@ -455,32 +607,6 @@ static void sobelContours(ofFbo* src, ofFbo* dest){
     dest->end();
 }
 
-static void chromaSeparation(ofFbo* src, ofFbo* dest, bool invert, float chromaSep, float chromasepHue, float chromasepAngle, float chromaOffset, float tintAmp, float reTint, float sidesSaturation){
-//        chromaShader.load("../shaders/chromaSep"); //dbg
-    
-    dest->begin();
-    chromaShader.begin();
-    chromaShader.setUniform1f("WIDTH", WIDTH);
-    chromaShader.setUniform1f("HEIGHT", HEIGHT2);
-    chromaShader.setUniform1f("intensity", chromaSep);
-    chromaShader.setUniform1f("sepAlpha", app->parameterMap[chromaSepAlpha]);
-    float csHue = chromasepHue;
-    if(tintAmp<1)
-        csHue = ofMap(chromasepHue/255-app->parameterMap[tintHue], 0, 1, app->parameterMap[tintCenter] - app->parameterMap[int(tintAmp)]/2, app->parameterMap[tintCenter] + app->parameterMap[int(tintAmp)]/2)*255;
-    chromaShader.setUniform1f("chromasepHue", csHue);
-    chromaShader.setUniform1f("chromaOffset", min(chromaOffset, tintAmp*255/2));
-    chromaShader.setUniform1f("chromasepAngle", chromasepAngle);
-    chromaShader.setUniform1f("chromaSepMode", app->parameterMap[chromaSepMode]);
-    chromaShader.setUniform1f("hue", app->parameterMap[tintHue]);
-    chromaShader.setUniform1f("reSaturate", app->parameterMap[reSaturate]);
-    //chromaShader.setUniform1f("saturation", app->parameterMap[tintSaturation]*200 /255.0);
-    chromaShader.setUniform1f("sidesSaturation", sidesSaturation);
-    chromaShader.setUniform1f("reTint", app->parameterMap[_reTint]);
-//    chromaShader.setUniform1f("invert", invert);
-    src->draw(0,0);
-    chromaShader.end();
-    dest->end();
-}
 
 static void blur(ofFbo* src, ofFbo* dest, float intensity, float mix, int resolution, bool vertical){
     //gBlurHor.load("../shaders/gblurHD");
@@ -532,7 +658,6 @@ static void doGamma(ofFbo* src, ofFbo* dest, float gamma){
 }
 
 static void doKalei(ofFbo* src, ofFbo* dest, float kaleiNb, float kaleiOffX, float kaleiOffY){
-//    kShader.load("../shaders/kalei");
     dest->begin();
     kShader.begin();
     kShader.setUniform1f("WIDTH", (float) WIDTH);
@@ -546,6 +671,7 @@ static void doKalei(ofFbo* src, ofFbo* dest, float kaleiNb, float kaleiOffX, flo
     kShader.setUniform1f("mirror", (float )app->parameterMap[kaleiMirror]);
     kShader.setUniform1f("scale", (float )app->parameterMap[kaleiScale]);
     kShader.setUniform1f("t", (float ) ofGetFrameNum());
+    kShader.setUniform1f("_mix", (float ) app->parameterMap[kalei]);
     src->draw(0,0);
     kShader.end();
     dest->end();
@@ -1108,20 +1234,22 @@ static void sortPixels(ofImage *img){
 static void loadFXShaders(){
     alphaShader.load("../shaders/alpha");
     skewShader.load("../shaders/skew");
-    skewShader.load("../shaders_circle/skew");
+//    skewShader.load("../shaders_circle/skew");
     displaceShader.load("../shaders/displace");
-    displaceShader.load("../shaders_circle/displace");
+//    displaceShader.load("../shaders_circle/displace");
     noiseShader.load("../shaders/noise");
     pixelShader.load("../shaders/pixellate");
-    pixelShader.load("../shaders_circle/pixellate");
+//    pixelShader.load("../shaders_circle/pixellate");
     sobelShader.load("../shaders/sobel");
-    sobelShader.load("../shaders_circle/sobel");
+//    sobelShader.load("../shaders_circle/sobel");
     gBlurHor.load("../shaders/gblurHD");
     hdrShader.load("../shaders/gamma");
     sInvert.load("../shaders/invert");
     kShader.load("../shaders/kalei");
-    kShader.load("../shaders_circle/kalei");
+//    kShader.load("../shaders_circle/kalei");
+    kShader.load("../shaders/kalei");
     chromaShader.load("../shaders/chromaSep");
+    chromaSepShader.load("../shaders/chromaSepOnly");
     circleShader.load("../shaders/circle");
     displaceGlitchShader.load("../shaders/displaceGlitch");
     lsdShader.load("../shaders/lsd");
@@ -1162,10 +1290,12 @@ static void initGlitches(AbstractApp* a){
     loadFXShaders();
     
     tunnelFbo.allocate(WIDTH,HEIGHT2);
+    tmpTunnelFbo.allocate(WIDTH,HEIGHT2);
     iii.allocate(WIDTH, HEIGHT, OF_IMAGE_COLOR_ALPHA);
     
     sortImage.allocate(WIDTH, HEIGHT, OF_IMAGE_COLOR_ALPHA);
     
+    initTunnel();
 
     for(int i=0;i<MAX_OMG3D2_FBOS;i++){
         ofFbo* fbo = new ofFbo;

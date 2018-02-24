@@ -58,6 +58,9 @@ print_limits(void)
 using namespace std;
 
 void eqkoscope::setup(){
+//    std::streambuf * old = std::cerr.rdbuf(stderrBuffer.rdbuf()); //redirection of stderr
+    
+    
 #ifdef OFFLINE_RENDER
     initOfflineMIDI();
 #endif
@@ -289,7 +292,6 @@ void eqkoscope::setup(){
     stressTestFilterList.push_back(paint);
     stressTestFilterList.push_back(paint2);
     stressTestFilterList.push_back(mediaZ);
-    stressTestFilterList.push_back(ball);
     stressTestFilterList.push_back(_mask);
     stressTestFilterList.push_back(movieSpeed);
     stressTestFilterList.push_back(useJoyStick);
@@ -304,9 +306,44 @@ void eqkoscope::setup(){
     randomParameters();
 #endif
     
+#ifdef INSTALL_COCHON
+    addCommand("NOTEON,user3,100/100,1,0,36/48", true);
+#endif
+    
     //
 //    loadMacro("/Users/Raph/Dev/of_v0.8.4_osx_release/apps/myApps/Feedback/bin/data/Projects/Stienis/lightning.xml");
     
+    // override the default codecs if you like
+    // run 'ffmpeg -codecs' to find out what your implementation supports (or -formats on some older versions)
+//    for(int i = 0;i<numVidRec;i++){
+//        ofxVideoRecorder v;
+//        vidRecorder.push_back(v);
+    sampleRate = 44100;
+    channels = 2;
+    
+    vidRecorder.setVideoCodec("h264");
+    vidRecorder.setVideoBitrate("15000k");
+    vidRecorder.setAudioCodec("mp3");
+    vidRecorder.setAudioBitrate("192k");
+
+    vidRecorder.setup("capture/eqkoCapture_"+ofToString(int(ofRandom(10000)))+fileExt, WIDTH, HEIGHT, 30, sampleRate, channels);
+
+    gui.loadFont("Avenir", 9);
+	ofParameter<float> radius;
+    gui.setup("eqkoscope v0.∞");
+    gui.setDefaultBackgroundColor(ofColor(0,0,0,0));
+    for(int i = 0;i<parametersInGUI.size();i++){
+        int id = parametersInGUI[i];
+        PSlider* slider = new PSlider(this, id);
+        slider->setup(parameterIDMap[id], deltaMap[id], parametersInGUIBounds[i][0], parametersInGUIBounds[i][1]);
+        slider->setDefaultHeight(12);
+        sliders.push_back(slider);
+        gui.add((sliders[i]));
+    }
+
+    
+//    }
+//    ofAddListener(vidRecorder.outputFileCompleteEvent, this, &ofApp::recordingComplete);
 }
 
 void eqkoscope::swapFBOs(ofFbo* a, ofFbo* b){
@@ -340,6 +377,10 @@ void eqkoscope::draw(){
     
     long date = ofGetElapsedTimeMicros();
     
+    ofPushMatrix();
+    {
+    
+    
     doGlitches = false;
     float tglitch = 1000/parameterMap[glitchFreq];
 #ifdef REAL_TIME_FX
@@ -352,8 +393,11 @@ void eqkoscope::draw(){
     }
     
     ofTranslate((ofGetWidth() - WIDTH)/2, (ofGetHeight() - HEIGHT)/2);
-    
-    ofHideCursor();
+   
+    if(!guiVisible)
+        ofHideCursor();
+    else
+        ofShowCursor();
     
     if(strip!=0)
         strip->draw();
@@ -427,11 +471,6 @@ void eqkoscope::draw(){
     }
     
     /** GLOBAL PARAMETERS **/
-    
-    if(parameterMap[ball]>BOOL_PARAM_EPSILON){
-        sphere(srcFbo, curFbo);
-        swapFBOs(srcFbo, curFbo);
-    }
     
     saturationShader.begin();
     saturationShader.setUniform1f("saturation", parameterMap[tintSaturation]);
@@ -549,6 +588,9 @@ void eqkoscope::draw(){
         audioImg.grabScreen(WIDTH/2-audioCapture/2, HEIGHT/2 - audioCapture/2, audioCapture, audioCapture);
     }
     
+    }
+    ofPopMatrix();
+    
     if(analyzeAudioB || savingGif || analyzeImg){
         i.grabScreen(0,0,WIDTH,HEIGHT);
         if(analyzeAudioB)
@@ -556,13 +598,27 @@ void eqkoscope::draw(){
         if(savingGif){
             i.resize(GIF_WIDTH, GIF_HEIGHT);
             i.update();
-            i.saveImage("capture/gif_"+ofToString(gifIndex)+"/"+ofToString(ofGetFrameNum())+".jpg", OF_IMAGE_QUALITY_BEST);
+
+            
+            if(!hasTakenVideo){
+                    bool success = vidRecorder.addFrame(i.getPixelsRef());
+                    if (!success)
+                        ofLogWarning("This frame was not added!");
+//                }
+                if (vidRecorder.hasVideoError())
+                    ofLogWarning("The video recorder failed to write some frames!");
+                if (vidRecorder.hasAudioError())
+                    ofLogWarning("The video recorder failed to write some audio samples!");
+            }else{
+                            i.saveImage("capture/gif_"+ofToString(gifIndex)+"/"+ofToString(ofGetFrameNum())+".jpg", OF_IMAGE_QUALITY_BEST);
+            }
+            
             isGifRecording = true;
         }
     }
     
     if(saveFrame){
-        i.grabScreen(0,0 , FINALWIDTH, FINALHEIGHT);
+        i.grabScreen(0, 0 , WIDTH, HEIGHT);
         stringstream str;
         str << "./capture/" << int(ofRandom(1,100000)) << ".png";
         i.saveImage(str.str());
@@ -588,14 +644,16 @@ void eqkoscope::draw(){
     glLoadIdentity();
     ofBackground(0, 0, 0);
     srcFbo->draw(0,0);
-//        displayInfo(width, height);
     }
-//    else{
-        displayInfo(FINALWIDTH, FINALHEIGHT);
-//    }
+
+    displayInfo(FINALWIDTH, FINALHEIGHT);
+    
+    if(guiVisible){
+//        gui.setDefaultFillColor(gui.getFillColor());
+        gui.draw();
+    }
     
     ofPopMatrix();
-    
     
     if(secondDisplay!=0){
         glfwSwapBuffers(secondDisplay);
@@ -614,13 +672,6 @@ void eqkoscope::draw(){
 
 
 void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
-    
-
-    
-    if(parameterMap[triumMode]>0){
-        doTrium(srcFbo, curFbo);
-        swapFBOs(srcFbo, curFbo);
-    }
     
     if(parameterMap[psyShift]){ //save the original content
         psyFbo.begin();
@@ -692,6 +743,7 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         swapFBOs(srcFbo, curFbo);
     }
     }
+    
     
     if(parameterMap[pert]>0){
         doPerturbation(srcFbo, curFbo);
@@ -774,26 +826,30 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         swapFBOs(srcFbo, curFbo);
     }
     
-    if(parameterMap[chromaSep]>0 || parameterMap[tintSaturation]>0 || parameterMap[_reTint] || 1==1){ //saturation mgmt
-        chromaSeparation(srcFbo, curFbo, doInvertion, parameterMap[chromaSep], parameterMap[chromasepHue], parameterMap[chromasepAngle], parameterMap[chromaOffset], parameterMap[tintAmp], parameterMap[_reTint], parameterMap[sidesSaturation] + (blackNWhiteMedia?1:0));
+    
+    if(parameterMap[omg3D]>BOOL_PARAM_EPSILON){ //test
+        displayOmg3D(srcFbo, curFbo);
         swapFBOs(srcFbo, curFbo);
-        if(parameterMap[doubleChromaSep]){
-            chromaSeparation(srcFbo, curFbo, doInvertion, parameterMap[chromaSep]/2, parameterMap[chromasepHue], parameterMap[chromasepAngle], parameterMap[chromaOffset]/2, parameterMap[tintAmp], parameterMap[_reTint], parameterMap[sidesSaturation] + (blackNWhiteMedia?1:0));
-            swapFBOs(srcFbo, curFbo);
-        }
     }
     
-//    bwShader.load("../shaders/b&w");
-    if(parameterMap[bw]>0){
-    curFbo->begin();
-    bwShader.begin();
-    bwShader.setUniform1f("steps", parameterMap[bw]);
-    srcFbo->draw(0,0);
-    bwShader.end();
-    curFbo->end();
-    swapFBOs(srcFbo, curFbo);
+    
+    
+    if(abs(parameterMap[bw])>0.5){
+//       bwShader.load("../shaders/b&w");
+        curFbo->begin();
+        bwShader.begin();
+        bwShader.setUniform1f("steps", parameterMap[bw]);
+        srcFbo->draw(0,0);
+        bwShader.end();
+        curFbo->end();
+        swapFBOs(srcFbo, curFbo);
     }
     
+    if(parameterMap[tintSaturation]>0 || parameterMap[_reTint] || 1==1){ //saturation mgmt
+        colorGrading(srcFbo, curFbo, doInvertion, parameterMap[tintAmp], parameterMap[_reTint], parameterMap[sidesSaturation] + (blackNWhiteMedia?1:0));
+        swapFBOs(srcFbo, curFbo);
+    }
+//hack
     
     if(parameterMap[sharpen]>BOOL_PARAM_EPSILON){
         curFbo->begin();
@@ -857,6 +913,7 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         swapFBOs(srcFbo, curFbo);
     }
     
+    
     if(parameterMap[hueFilter]>0){
         curFbo->begin();
         hueFilterShader.begin();
@@ -893,7 +950,16 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         swapFBOs(srcFbo, curFbo);
     }
     
-    //mempry leak
+    if(parameterMap[chromaSep]>0){
+        chromaSeparation(srcFbo, curFbo, doInvertion, parameterMap[chromaSep]/2, parameterMap[chromaSepHue], parameterMap[chromaSepAngle], parameterMap[chromaOffset]/2, parameterMap[sidesSaturation] + (blackNWhiteMedia?1:0));
+        swapFBOs(srcFbo, curFbo);
+        if(parameterMap[doubleChromaSep]){
+            chromaSeparation(srcFbo, curFbo, doInvertion, parameterMap[chromaSep]/2, parameterMap[chromaSepHue], parameterMap[chromaSepAngle], parameterMap[chromaOffset]/2, parameterMap[sidesSaturation] + (blackNWhiteMedia?1:0));
+            swapFBOs(srcFbo, curFbo);
+        }
+    }
+    
+    //memory leak
 //    if(parameterMap[sortXThresh]>0 || parameterMap[sortYThresh]>0){
 //        if(parameterMap[sortXThresh]>BOOL_PARAM_EPSILON){
 //            ofPushMatrix();
@@ -948,12 +1014,6 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
     }
     
     //***** SPACE ****//
-    
-    if(parameterMap[omg3D]>BOOL_PARAM_EPSILON){
-        displayOmg3D(srcFbo, curFbo);
-        swapFBOs(srcFbo, curFbo);
-    }
-    
 
     
     if(parameterMap[omg3D2]>BOOL_PARAM_EPSILON){
@@ -965,11 +1025,18 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         displayOmg3D2(srcFbo, curFbo, scenes[0]!=feedbackScene, parameterMap[omg3D2Speed],
                       parameterMap[multiFbos]>BOOL_PARAM_EPSILON, parameterMap[omg3D2Rotation], parameterMap[omg3D2Dist], parameterMap[omg3D2Symetry],
                       parameterMap[omg3D2FreeRotation], 0, 0);
-        ofPopMatrix();
+        
         //here
 //        tunnel(srcFbo, curFbo, scenes[0]!=feedbackScene, parameterMap[omg3D2Speed],
 //                      parameterMap[multiFbos]>BOOL_PARAM_EPSILON, parameterMap[omg3D2Rotation], parameterMap[omg3D2Dist], parameterMap[omg3D2Symetry],
 //                      parameterMap[omg3D2FreeRotation]);
+        
+        ofPopMatrix();
+        swapFBOs(srcFbo, curFbo);
+    }
+    
+    if( parameterMap[user5] > 0 ){
+        tunnelMeshDistort(srcFbo, curFbo);
         swapFBOs(srcFbo, curFbo);
     }
     
@@ -987,7 +1054,7 @@ void eqkoscope::applyFXChain(ofFbo* a, ofFbo* b){
         srcFbo->draw(0,0);
         tempFbo2.end();
         
-        doGlow(srcFbo, curFbo, &tempFbo, &tempFbo2, parameterMap[glow], parameterMap[glowIntensity], parameterMap[glowResolution]);
+        doGlow(srcFbo, curFbo, &tempFbo, &tempFbo2, parameterMap[glow], parameterMap[glow], parameterMap[glowResolution]);
         ofEnableBlendMode(OF_BLENDMODE_SCREEN);
         curFbo->begin();
         ofBackground(0);
@@ -1119,6 +1186,8 @@ void eqkoscope::displayInfo(int w, int h){
         string macStr = currentMacroStr;
         macStr = macStr.replace(0, currentMacroStr.size()-25, "");
         str << "Crt. macro : []"<< macStr << endl;
+        str << endl;
+        str << "OSC "<< " port " << OSC_INPUT << " | statuts: "<< receiver.listen_socket->IsBound() << endl;
 
         if(secondDisplay==0)
         ofDrawBitmapString(str.str(), w/2, h/4);
@@ -1187,15 +1256,16 @@ void eqkoscope::applyMask(){
 
 void eqkoscope::doPaint(){
     if(parameterMap[paint]){ //random calls are pretty fast
-        srcFbo->readToPixels(pix);
+        srcFbo->readToPixels(pix); //does this gets optimized ?
         if(pix.getPixels()!=NULL){
             float r;
             float xx, yy;
             int fboIndex = ofGetFrameNum() % paintFbos.size();
             paintFbos[fboIndex]->begin();
-            
-            paintPass(60, 0.75, 4, &pix); //different passes for different sizes
-            paintPass(20, 0.25, 0.75, &pix);
+            ofBackground(0, 0, 0); ///REMOVE ! BETA TEST !!
+            srcFbo->draw(0,0);
+//            paintPass3(60, 0.75, 4, &pix); //different passes for different sizes
+            paintPass3(20/parameterMap[paint], 0.25, 0.5, &pix);
             
 //            paintPass(150, 0.25, 0.75, &pix); //different passes for different sizes
 //            paintPass(40, 0.1, 0.3, &pix);
@@ -1279,6 +1349,36 @@ void eqkoscope::paintPass2(int resolution, float minSize, float maxSize, float r
             ofEndShape();
             
             ofPopMatrix();
+        }
+}
+
+/// TODO : imagine que les cloportes puissent se deplacer !
+void eqkoscope::paintPass3(int resolution, float minSize, float maxSize, ofPixels* pix){
+    float xx, yy, r;
+    for(int x=resolution/2;x<WIDTH;x+=resolution)
+        for(int y=resolution/2;y<HEIGHT;y+=resolution){
+            xx = x;
+            yy = y;
+            xx += ofRandom(-resolution/2, resolution/2);
+            yy += ofRandom(-resolution/2, resolution/2);
+            ofColor c = pix->getColor(x, HEIGHT2-(y+(HEIGHT2-HEIGHT)/2));
+            float b = c.getBrightness();
+            bool pb = app->parameterMap[_invert] == 0;
+            if((b>200 && pb) || (b<55 && !pb)){
+                ofSetColor(c);
+                r = ofRandom(360);
+                ofPushMatrix();
+                ofTranslate(xx,yy);
+                r = ofNoise((ofGetFrameNum()*4 + xx)/500, yy/500) * 360;
+                ofRotate(r);
+                int strokeIndex = (int)ofRandom(brushstrokes.size()-0.5);
+                float sizeRatio = ofRandom(minSize, maxSize);
+                brushstrokes[strokeIndex]->draw(-brushstrokes[strokeIndex]->width/2*sizeRatio, -brushstrokes[strokeIndex]->height/2*sizeRatio,
+                                                brushstrokes[strokeIndex]->width*sizeRatio,
+                                                brushstrokes[strokeIndex]->height*sizeRatio);
+                ofPopMatrix();
+                y+=resolution;//eviter les embouteillages
+            }
         }
 }
 
@@ -1580,10 +1680,11 @@ void eqkoscope::reset(){
     midiCCAutos.clear();
     midiNoteonAutos.clear();
     
-    initParameters();
     initMidi();
     loadMacroMap();
     initOSC();
+    
+    initParameters();
 
     analyzeMacros();
     

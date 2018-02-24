@@ -593,6 +593,7 @@ void eqkoscope::update(){
     /** LEAP **/
     updateLeap();
     
+    
     updateMicros += microsEasing*(ofGetElapsedTimeMicros() - date - updateMicros);
 }
 

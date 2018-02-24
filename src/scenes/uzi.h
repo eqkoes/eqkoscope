@@ -45,9 +45,7 @@ public:
         imgChanged = true;
         
         swapTintShader.load("../shaders/swapTint");
-        
-        initParameters();
-    }
+            }
     
     void setup(){
         forceLoad = true;
@@ -82,7 +80,7 @@ public:
             source->begin();
             if(app->parameterMap[transluscentUzi])
             ofBackground(ofColor(0,0,0,0));
-else
+            else
             ofBackground(ofColor(0,0,0));
             if(app->parameterMap[ak47Mode] && !app->parameterMap[ak47Frame]){
             }else{
@@ -109,7 +107,7 @@ else
                     ofRotate(45*app->parameterMap[autoRot]*sin(app->parameterMap[autoRotFreq]*ofGetFrameNum()/15.0));
                
                 if(app->parameterMap[resize])
-                image->draw(-w/2, -h/2, (w), h);
+                    image->draw(-w/2, -h/2, (w), h);
                 else
                     image->draw(-image->width/2, -image->height/2);
 

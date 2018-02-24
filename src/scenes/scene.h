@@ -19,8 +19,6 @@ public:
     
     Scene(AbstractApp* app, std::string id){ this->app = app;
         this->sceneID==id;}
-    void initParameters(){
-    }
     virtual void setup()=0;
     virtual void exit()=0;
     virtual void draw()=0;

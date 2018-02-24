@@ -17,9 +17,7 @@ public:
                                          ofRandom(HEIGHT+app->parameterMap[updateLen]*2)-app->parameterMap[updateLen],
                                          ofRandom(-1,1), ofRandom(0,1)));
         }
-        
-        initParameters();
-    }
+            }
     void setup(){
         
     }

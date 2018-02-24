@@ -96,18 +96,18 @@ void eqkoscope::openPorts(){
     
     for(int i=0;i<ports.size();i++){
         ofxMidiIn in = ofxMidiIn();
-        in.setVerbose(true);
+        in.setVerbose(false);
         in.openPort(ports[i]);
         if(in.isOpen()){
             if(in.getName().compare("Komplete Audio 6") //forbidden port names
                //               && in.getName().compare("nanoKONTROL2 SLIDER/KNOB")
                //&& in.getName().compare("APC Key 25")
                ){
-                cout << "midi port opened " << in.getName() << endl;
+//                cout << "midi port opened " << in.getName() << endl;
                 in.addListener(this);
                 in.ignoreTypes(false, false, false);
                 midiIns.push_back(in);
-                cout << "MIDI PORT OK " << in.getName() << endl;
+//                cout << "MIDI PORT OK " << in.getName() << endl;
                 if(!in.getName().compare("Launchpad S"))
                     is_launchpad = true;
                 if(strStartsWith(in.getName(), "SL MkII Port"))
@@ -413,29 +413,6 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
             uzi->midiEvent(eventArgs);
         }else{
             bool alluzis = false;
-            if(parameterMap[triumMode]!=0){
-                alluzis = true;
-                for(int i=0;i<2;i++){
-                    bool u = false;
-                    for(int j=0;j<uzis.size();j++)
-                        if(scenes[i]==uzis[j])
-                            u = true;
-                    if(scenes[i]==uzi)
-                        u = true;
-                    if(!u){
-                        alluzis = false;
-                        break;
-                    }
-                }
-                if(alluzis){
-                    if(scenes[0]!=0)
-                        scenes[0]->midiEvent(eventArgs);
-                    if(scenes[1]!=0)
-                        scenes[1]->midiEvent(eventArgs);
-                    if(scenes[2]!=0)
-                        scenes[2]->midiEvent(eventArgs);
-                }
-            }
             if(!alluzis)
                 if(scenes[parameterMap[currentScene]]!=0)
                     scenes[parameterMap[currentScene]]->midiEvent(eventArgs);

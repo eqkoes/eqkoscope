@@ -42,6 +42,9 @@
 #include "simple_midi_reader.h"
 //#include "ofxGrt.h"
 #include "genetic.h"
+#include "ofxVideoRecorder.h"
+#include "ofxGui.h"
+
 
 #ifdef INSTALL_THOUGHTS
 #include "thoughts.h"
@@ -61,7 +64,22 @@
 #include "ofxEtherdream.h"
 #endif
 
-
+class PSlider : public ofxSlider<float>
+{
+public:
+    PSlider(AbstractApp* app, int p) : ofxSlider(){
+        this->app = app;
+        param = p;
+        setDefaultFillColor(ofColor(0,255,255,100));
+        setDefaultBackgroundColor(ofColor(0,0,0,100));
+    }
+    bool mouseDragged(ofMouseEventArgs &args){
+        ofxSlider::mouseDragged(args);
+        app->deltaMap[param] = value.get();
+    }
+    AbstractApp* app;
+    int param;
+};
 
 class eqkoscope : public ofBaseApp,  public ofxMidiListener, public AbstractApp
 {
@@ -87,6 +105,7 @@ public:
     void doPaint();
     
     void paintPass(int resolution, float minSize, float maxSize,ofPixels* pix);
+    void paintPass3(int resolution, float minSize, float maxSize,ofPixels* pix);
     void paintPass2(int resolution, float minSize, float maxSize, float randSize, ofPixels* pix);
     
     void swapFBOs(ofFbo* a, ofFbo* b);
@@ -171,6 +190,7 @@ public:
     
     void niceRandom(int x);
     
+    void parameterChanged(int & circleResolution);
 
 protected:
     /** MACROS **/
@@ -193,6 +213,8 @@ protected:
     float currentRms[10]; //max stereo
     
     int nbFramesSinceAudioStart = 0;
+    
+    std::stringstream stderrBuffer;
     
     /** MIDI **/
     string MIDIMapPath = "MIDIMap.csv";
@@ -471,6 +493,20 @@ protected:
     int shadowFrames = 0;
     bool shadowFrame = false;
     long trueFrameNum = 0;
+    
+    /** VIDEO GRABBY THINGY **/
+    int sampleRate;
+    int channels;
+    float dummyAudio[AUDIO_BUFFER_SIZE];
+    ofxVideoRecorder vidRecorder;
+    int vidRecorderIndex = 0;
+    string fileExt = ".mov"; // ffmpeg uses the extension to determine the container type. run 'ffmpeg -formats' to see supported formats
+    bool hasTakenVideo = true;
+    
+    ofxPanel gui;
+    std::vector<PSlider*> sliders;
+    bool guiVisible = false;
+
 };
 
 #endif

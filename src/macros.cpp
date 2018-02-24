@@ -397,7 +397,7 @@ void eqkoscope::parseMacro(string path){
             parameterMap[displaceVAmp] = macro.getFloatValue("displaceVAmp");
             parameterMap[displaceProba] = macro.getFloatValue("displaceProba");
             parameterMap[chromaOffset] = macro.getFloatValue("chromaOffset");
-            parameterMap[chromasepAngle] = macro.getFloatValue("chromasepAngle");
+            parameterMap[chromaSepAngle] = macro.getFloatValue("chromasepAngle");
             parameterMap[chromaSep] = macro.getFloatValue("chromaSep");
             parameterMap[doubleChromaSep] =macro.getFloatValue("doubleChromaSep")==1;
             deltaMap[chromaSep] = parameterMap[chromaSep];
@@ -451,12 +451,11 @@ void eqkoscope::parseMacro(string path){
             else
                 parameterMap[blendType] = MULTIPLY;
             
-            parameterMap[triumMode] = macro.getFloatValue("triumMode");
             parameterMap[centerTrium] = macro.getFloatValue("centerTrium");
             parameterMap[currentScene] = macro.getFloatValue("currentScene");
             
             if(loadColorWithMacro){
-                parameterMap[chromasepHue] = macro.getFloatValue("chromasepHue");
+                parameterMap[chromaSepHue] = macro.getFloatValue("chromasepHue");
                 deltaMap[chromaSep] = macro.getFloatValue("chromaSepDelta");
                 if(macro.getNumChildren("tintSaturation")>0)
                     parameterMap[tintSaturation] = macro.getFloatValue("tintSaturation");
@@ -528,7 +527,6 @@ void eqkoscope::parseMacro(string path){
             if(!v2){ //old solo scene loading
                 macro.setToParent();
                 
-                parameterMap[triumMode] = 0;
                 if(macro.exists("feedback"))
                     loadSoloScene(feedbackScene);
                 if(macro.exists("fractal"))
