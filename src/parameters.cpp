@@ -261,7 +261,6 @@ void AbstractApp::initParameters(){
    
     /** CINEMA **/
     parameterMap[crtPos]=0;
-    parameterMap[posterize] = 255;
     parameterMap[movieSpeed] = 1;
     parameterMap[backMask] = false;
     parameterMap[adjust] = false;

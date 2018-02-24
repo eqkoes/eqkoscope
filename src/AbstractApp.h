@@ -228,7 +228,6 @@ public:
         parameterNameMap["lines_yres"]=lines_yres;
         parameterNameMap["lines_mesh"]=lines_mesh;
         parameterNameMap["crtPos"]=crtPos;
-        parameterNameMap["posterize"]=posterize;
         parameterNameMap["movieSpeed"]=movieSpeed;
         parameterNameMap["transluscentUzi"]=transluscentUzi;
         parameterNameMap["gamma"]=_gamma;
@@ -386,8 +385,8 @@ public:
         parametersInGUIBounds.push_back(ofVec2f(0, 2));
         parametersInGUI.push_back(omg3D2Depth);
         parametersInGUIBounds.push_back(ofVec2f(0, 1));
-        parametersInGUI.push_back(omg3D2Nb);
-        parametersInGUIBounds.push_back(ofVec2f(2, 50));
+//        parametersInGUI.push_back(omg3D2Nb);
+//        parametersInGUIBounds.push_back(ofVec2f(2, 50));
         parametersInGUI.push_back(omg3D2Rotation);
         parametersInGUIBounds.push_back(ofVec2f(-720, 720));
         parametersInGUI.push_back(omg3D2Speed);
@@ -458,20 +457,20 @@ public:
         parametersInGUIBounds.push_back(ofVec2f(0, 25));
         parametersInGUI.push_back(displaceAmp);
         parametersInGUIBounds.push_back(ofVec2f(0, 1));
-        parametersInGUI.push_back(displaceVAmp);
-        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+//        parametersInGUI.push_back(displaceVAmp);
+//        parametersInGUIBounds.push_back(ofVec2f(0, 1));
         parametersInGUI.push_back(displaceProba);
         parametersInGUIBounds.push_back(ofVec2f(0, 1));
         parametersInGUI.push_back(skewAmp);
         parametersInGUIBounds.push_back(ofVec2f(0, 1));
-        parametersInGUI.push_back(skewVAmp);
-        parametersInGUIBounds.push_back(ofVec2f(0, 1));
+//        parametersInGUI.push_back(skewVAmp);
+//        parametersInGUIBounds.push_back(ofVec2f(0, 1));
         parametersInGUI.push_back(pert);
         parametersInGUIBounds.push_back(ofVec2f(0, 1));
         parametersInGUI.push_back(pertEvoAuto);
         parametersInGUIBounds.push_back(ofVec2f(0, 0.1));
-        parametersInGUI.push_back(paint);
-        parametersInGUIBounds.push_back(ofVec2f(0, 10));
+//        parametersInGUI.push_back(paint);
+//        parametersInGUIBounds.push_back(ofVec2f(0, 10));
         parametersInGUI.push_back(echoNb);
         parametersInGUIBounds.push_back(ofVec2f(0, 10));
     }
