@@ -28,9 +28,7 @@ public:
     void draw(){
         ofTranslate(WIDTH/2,HEIGHT/2-(HEIGHT2-HEIGHT)/2);
         
-        ofSetColor(ofColor::black);
-        ofRect(-WIDTH,-HEIGHT,WIDTH*2,HEIGHT*2);
-        ofSetColor(ofColor::white);
+        ofBackground(0);
         
         ofTranslate(app->parameterMap[mediaX]*WIDTH, -app->parameterMap[mediaY]*HEIGHT, app->parameterMap[mediaZ]*HEIGHT);
         ofRotateX(app->parameterMap[mediaRotX]);
@@ -44,7 +42,8 @@ public:
         int yres = int((1+app->parameterMap[lines_yres]*HEIGHT2/10)/mm)*mm;
         int xres = max(1,int(20/mm)*mm);
         
-        int hh = HEIGHT*(1-app->parameterMap[user1]);
+//        int hh = HEIGHT*(1-app->parameterMap[user1]);
+        int hh = HEIGHT;
         for(int y=yres/2-hh+HEIGHT/2;y<hh+HEIGHT/2;y+=yres){
             ofPolyline b;
             ofMesh mesh;
@@ -176,7 +175,7 @@ public:
         (*xml) << "</lines>" << endl;
     }
     
-    void loadMacro(ofXml *xml){
+    void loadMacro(TiXmlHandle *xml){
     }
     
     std::string getInfo(){
@@ -185,7 +184,7 @@ public:
     
     bool isBackground(){return back;}
     
-    void setResolution(int r){
+    void setResolution(){
         //reset the attractors
         attractors.clear();
         for(int i=0;i<50;i++){

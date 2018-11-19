@@ -10,8 +10,6 @@
 #include <sstream>
 #include "math.h"
 #include "stdlib.h"
-#include <ofVideoGrabber.h>
-#include "distortion.h"
 
 #define CENTRAL 0
 #define LEFT 1
@@ -24,8 +22,6 @@
 #define MODE_FEEDBACK 0
 #define MODE_GLITCH 1
 
-// log : removed imageUzi etc
-
 class Feedback : public Scene
 {
     
@@ -33,46 +29,47 @@ public:
     
     Feedback(AbstractApp* app) : Scene(app, "feedback"){
         sceneID = "feedback";
-        
+
+        img = new ofImage;
+        img->allocate(WIDTH, HEIGHT2, OF_IMAGE_COLOR);
         remanentFbo = new ofFbo;
-        remanentFbo->allocate(WIDTH, HEIGHT2 );
+        remanentFbo->allocate(WIDTH, HEIGHT2);
         source = new ofFbo;
         source->allocate(WIDTH, HEIGHT2);
         source2 = new ofFbo;
         source2->allocate(WIDTH, HEIGHT2);
-
         loadImgs();
         
         invertShader.load("../shaders/invert");
         shader.load("../shaders/colorthresholdsaturation");
         erodeShader.load("../shaders/erode");
         
-        alphaShader.load("../shaders/alphaBlack");
+        alphaShader.load("../shaders/alpha");
         blendShader.load("../shaders/blend");
-        maskShader.load("../shaders/blend");
+        hBackShader.load("../shaders/hBack");
         
-//        feedbackShader.load("../shaders/feedback");
-//        feedbackShaderImage.loadImage("../shaders/feedbackImage.jpg");
-//        feedbackShaderImage.resize(WIDTH, HEIGHT);
         
         shapeMesh.setMode(OF_PRIMITIVE_LINE_LOOP);
         
+        vidPlayer = new ofVideoPlayer;
+        
         randomColor.reserve(100);
         updateRandomColor();
-        
-        #ifdef CAMERA
-#ifdef VERBOSE
-        grabby.listDevices();
-#endif
-#endif
-    }
+            }
     
     void setup(){
         updateShape();
     }
-
-    void processEvents(){
+    
+    void draw(){
+        source->begin();
+        
+            ofSetColor(ofColor::black);
+            ofRect(0,0,WIDTH,HEIGHT2);
+            ofSetColor(ofColor::white);
+        
         for (int e=0;e<events.size();e++) {
+
 
             if (!events.at(e).compare("invert")) {
                 app->parameterMap[f_invertFrame] = true;
@@ -125,199 +122,109 @@ public:
             }
         }
         events.clear();
+        
+        if (imageUzi)
+            events.push_back("changeImage");
+        
+        ofPushMatrix();{
+            ofTranslate(WIDTH/2, HEIGHT2/2);
+//            ofTranslate(app->parameterMap[offx], app->parameterMap[offy]);
+            ofRotateX(app->parameterMap[pitchRot]);
+            ofRotate(app->parameterMap[rot]);
+            ofScale(app->parameterMap[scale], app->parameterMap[scale]);
+            
+            ofPushMatrix();
+            
+            ofSetColor(app->parameterMap[feedbackRemanence] * 255);
+           
+            remanentFbo->draw(-WIDTH/2,-HEIGHT2/2);
+            
+            ofScale(1/app->parameterMap[scale], 1/app->parameterMap[scale]);
+            ofTranslate(-WIDTH/2, -HEIGHT2/2);
+            drawNested();
+            ofTranslate(WIDTH/2, HEIGHT2/2);
+            ofScale(app->parameterMap[scale], app->parameterMap[scale]);
+
+            if(app->parameterMap[blackCenter]){
+                ofSetColor(ofColor::black);
+                ofCircle(WIDTH/2, HEIGHT2/2, 5*(app->parameterMap[scale]-0.7));
+                ofSetColor(ofColor::white);
+            }
+
+            ofPopMatrix();
+
+            ofRotate(-app->parameterMap[rot]);
+            ofRotateX(-app->parameterMap[pitchRot]);
+            
+            if(!app->parameterMap[noSource]){
+                
+//                if (drawImg) {
+//                    imgSrc->draw(-imgSrc->width/2, -imgSrc->height/2);
+//                    if(!imageUzi)
+//                        drawImg = false;
+//                }
+                
+//                if(drawVid && vidPlayer!=0){
+//                    ofEnableBlendMode(OF_BLENDMODE_ADD); //ADD VIDEO SOURCE
+//                    //TODO : modulate alpha by brightness ? (in shader)
+//                    vidPlayer->draw(-vidPlayer->width/2,-vidPlayer->height/2);
+//                    ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+//                }
+                
+                if(app->deltaMap[shapeNbPts]>=1)
+                    drawShape();
+                
+                if(app->parameterMap[nbPoints]>0)
+                    drawPoints();
+                
+                ofRotate(app->parameterMap[curShapeRot]);
+                ofRotateX(app->parameterMap[mediaRotX]);
+                ofRotateY(app->parameterMap[mediaRotY]);
+                ofRotateZ(app->parameterMap[mediaRotZ]);
+                ofTranslate(app->parameterMap[mediaX]*WIDTH,app->parameterMap[mediaY]*HEIGHT,app->parameterMap[mediaZ]*HEIGHT);
+                if(shapeMesh.getNumVertices()>0){
+                    for(int i=0;i<app->parameterMap[shapeWeight];i++){
+                        ofTranslate(0,1*i);
+                        shapeMesh.draw();
+                        ofTranslate(0,-2*i);
+                        shapeMesh.draw();
+                        ofTranslate(1*i,1*i);
+                        shapeMesh.draw();
+                        ofTranslate(-2*i,0);
+                        shapeMesh.draw();
+                        ofTranslate(1*i,0);
+                    }
+                    shapeMesh.draw();
+                }
+                if(shapeId != app->deltaMap[shapeNbPts] + app->deltaMap[shapeStyle]*1000) //draw a new shape
+                shapeId = app->deltaMap[shapeNbPts] + app->deltaMap[shapeStyle]*1000;
+            }
+        }ofPopMatrix();
+
+        source->end();
+        
+        if(app->parameterMap[erode])
+        {
+            applyErosion(source, source2);
+            applyThreshold(source2, source);
+            source->draw(0,0);
+        }
+        else
+        {
+            applyThreshold(source, source2);
+            source2->draw(0,0);
+        }
+        
+        bool invert = app->parameterMap[f_invertFrame]
+        || (app->parameterMap[f_strobe] && app->parameterMap[doubleInversion]);
+        if(invert)
+        {
+            applyInvert(source2, source);
+        }
     }
-    
-    void draw(){
-        processEvents();
-
-        source->begin();{
-            ofPushMatrix();{
-                       ofTranslate(WIDTH/2, HEIGHT2/2);
-                       ofTranslate(app->parameterMap[mediaX]*HEIGHT, app->parameterMap[mediaY]*HEIGHT);
-                       ofRotateX(app->parameterMap[pitchRot]);
-                       ofRotate(app->parameterMap[rot]);
-                       ofScale(app->parameterMap[scale], app->parameterMap[scale]);
-
-                       ofPushMatrix();
-
-                       ofSetColor(app->parameterMap[feedbackRemanence] * 255);
-
-                       remanentFbo->draw(-WIDTH/2,-HEIGHT2/2);
-
-                       if(app->parameterMap[doubleFeedback]==1){ // double feedback
-                           ofPushMatrix();
-                           float sss= 1/app->parameterMap[scale];
-                           sss *= sss;
-                           ofScale(sss, sss);
-
-                           blendShader.begin();
-                           blendShader.setUniform1i("mode", app->parameterMap[blendType]);
-                           blendShader.setUniform1f("thresh", 0.3);
-                           remanentFbo->draw(-WIDTH/2,-HEIGHT2/2); //blend ?
-                           blendShader.end();
-                           ofPopMatrix();
-                       }
-
-                       if(app->deltaMap[taijin]){ //taijin : a taoist inspired idea
-                           app->deltaMap[backMask] = 1;
-                           for(int i=-1;i<=1;i+=2){
-                               ofPushMatrix();
-                           ofTranslate(0, i*1.5*HEIGHT/6);
-                           ofScale(-1/6.0, 1/6.0);
-
-                               maskShader.begin();
-                               maskShader.setUniform1f("thresh", 1); //dunno why 1 works
-                               maskShader.setUniform1f("WIDTH", WIDTH);
-                               maskShader.setUniform1f("HEIGHT", HEIGHT);
-                               maskShader.setUniform1i("invert", 1);
-                               maskShader.setUniform1i("alpha", 1);
-                               maskShader.setUniform1i("circleMode", 1);
-                               remanentFbo->draw(-WIDTH/2,-HEIGHT2/2);
-                               maskShader.end();
-
-                               ofPopMatrix();
-                           }
-                       }
-
-                       ofPushMatrix();
-                       {
-                           ofScale(1/app->parameterMap[scale], 1/app->parameterMap[scale]);
-                           ofTranslate(-WIDTH/2, -HEIGHT2/2);
-
-                           ofTranslate(app->parameterMap[mediaX]*WIDTH, -app->parameterMap[mediaY]*HEIGHT, app->parameterMap[mediaZ]*HEIGHT);
-                           ofRotateX(app->parameterMap[mediaRotX]);
-                           ofRotateY(app->parameterMap[mediaRotY]);
-                           ofRotateZ(app->parameterMap[mediaRotZ]);
-
-           //                drawNested();
-
-           #ifdef CAMERA
-                           if(app->parameterMap[camera]>0 && grabby.isInitialized()){
-                               blendShader.begin();
-           //                    int mode = app->parameterMap[blendType];
-                               blendShader.setUniform1i("mode", 0);
-                               blendShader.setUniform1f("thresh", 0.3);
-                               grabby.draw(0, 0, WIDTH, HEIGHT);
-                               blendShader.end();
-                           }
-           #endif
-
-                       }
-                       ofPopMatrix();
-
-                       ofPushMatrix();
-                       {
-                           ofScale(1/app->parameterMap[scale], 1/app->parameterMap[scale]);
-                           ofTranslate(-WIDTH/2, -HEIGHT2/2);
-
-           //                drawNested();
-
-                           ofTranslate(app->parameterMap[mediaX]*WIDTH, -app->parameterMap[mediaY]*HEIGHT, app->parameterMap[mediaZ]*HEIGHT);
-                           ofRotateX(app->parameterMap[mediaRotX]);
-                           ofRotateY(app->parameterMap[mediaRotY]);
-                           ofRotateZ(app->parameterMap[mediaRotZ]);
-
-                       }ofPopMatrix();
-
-                       if(app->parameterMap[blackCenter]){
-                           ofSetColor(ofColor::black);
-                           ofTranslate(WIDTH/2, HEIGHT2/2, 5*(app->parameterMap[scale]-0.7));
-                           ofSetColor(ofColor::white);
-                       }
-
-                       ofPopMatrix();
-
-                       ofRotate(-app->parameterMap[rot]);
-                       ofRotateX(-app->parameterMap[pitchRot]);
-
-                       if(!app->parameterMap[noSource]){
-
-                           if(app->deltaMap[shapeNbPts]>=1)
-                               drawShape();
-
-                           if(app->parameterMap[nbPoints]>0)
-                               drawPoints();
-
-                           ofRotate(app->parameterMap[curShapeRot]);
-                           ofRotateX(app->parameterMap[mediaRotX]);
-                           ofRotateY(app->parameterMap[mediaRotY]);
-                           ofRotateZ(app->parameterMap[mediaRotZ]);
-                           ofTranslate(app->parameterMap[mediaX]*WIDTH,app->parameterMap[mediaY]*HEIGHT,app->parameterMap[mediaZ]*HEIGHT);
-                           if(shapeMesh.getNumVertices()>0){
-                               for(int i=0;i<app->parameterMap[shapeWeight];i++){
-                                   ofTranslate(0,1*i);
-                                   shapeMesh.draw();
-                                   ofTranslate(0,-2*i);
-                                   shapeMesh.draw();
-                                   ofTranslate(1*i,1*i);
-                                   shapeMesh.draw();
-                                   ofTranslate(-2*i,0);
-                                   shapeMesh.draw();
-                                   ofTranslate(1*i,0);
-                               }
-                               shapeMesh.draw();
-                           }
-                           if(shapeId != app->deltaMap[shapeNbPts] + app->deltaMap[shapeStyle]*1000) //draw a new shape
-                               shapeId = app->deltaMap[shapeNbPts] + app->deltaMap[shapeStyle]*1000;
-                       }
-                   }ofPopMatrix();
-
-                       drawNested();
-
-                       ofPushMatrix();
-
-                       ofTranslate(WIDTH/2, HEIGHT2/2);
-                       ofTranslate(app->parameterMap[mediaX]*HEIGHT, app->parameterMap[mediaY]*HEIGHT);
-                       ofRotateX(app->parameterMap[pitchRot]);
-                       ofRotate(app->parameterMap[rot]);
-                       ofScale(app->parameterMap[scale], app->parameterMap[scale]);
-
-
-                       ofSetColor(app->parameterMap[feedbackRemanence] * 255);
-                       ofTranslate(-WIDTH/2, -HEIGHT2/2);
-                       alphaBlend(remanentFbo);
-
-                       ofPopMatrix();
-
-
-                   }source->end();
-
-           //        applyFeedback(source, source2);
-           //        ofFbo* tmp = source;
-           //        source = source2;
-           //        source2 = tmp;
-
-                   applyThreshold(source, source2);
-
-                   if(app->parameterMap[erode]){
-                       ofFbo* tmp = source;
-                       source = source2;
-                       source2 = tmp;
-                       applyErosion(source, source2);
-                   }
-
-                   ofFbo* tmp = source;
-                   source = source2;
-                   source2 = tmp;
-
-                   source->draw(0,0);
-    }
-    
-//    void applyFeedback(ofFbo* src,ofFbo* dest){
-//        LOAD_ASYNC         feedbackShader.load("../shaders/feedback");
-//
-//        dest->begin();
-//        ofBackground(0);
-//        feedbackShader.begin();
-//        feedbackShader.setUniformTexture("tex1", feedbackShaderImage.getTextureReference(), 1);
-//        src->draw(0,0);
-//        feedbackShader.end();
-//        dest->end();
-//    }
     
     void applyInvert(ofFbo* src,ofFbo* dest){
         dest->begin();
-        ofBackground(0);
         invertShader.begin();
         src->draw(0,0);
         invertShader.end();
@@ -327,7 +234,7 @@ public:
     
     void applyThreshold(ofFbo* src,ofFbo* dest){
         dest->begin();
-        {
+        
         ofBackground(0);
         
         ofShader* thresholdShader = &shader;
@@ -340,16 +247,16 @@ public:
             thresholdShader->setUniform1f("drywet", app->parameterMap[threshold]);
             thresholdShader->setUniform1f("brightness", 1);
             thresholdShader->setUniform1f("levels", 2);
-            thresholdShader->setUniform1f("saturation", app->parameterMap[tintSaturation]);
+            thresholdShader->setUniform1f("saturation", 1);
         }
         
         ofSetColor(255,255,255);
         src->draw(0,0);
-        
+                
         
         if(app->parameterMap[blackCenter]>=1-BOOL_PARAM_EPSILON){
             ofSetColor(ofColor::black);
-            ofTranslate(WIDTH/2, HEIGHT2/2, 5*(app->parameterMap[scale]-0.7));
+            ofCircle(WIDTH/2, HEIGHT2/2, 5*(app->parameterMap[scale]-0.7));
             ofSetColor(ofColor::white);
         }
         
@@ -359,13 +266,12 @@ public:
         
         app->parameterMap[doubleInversion] = !app->parameterMap[doubleInversion];
         app->parameterMap[f_invertFrame] = false;
-        }
+        
         dest->end();
     }
     
     void applyErosion(ofFbo* src, ofFbo* dest){
         dest->begin();
-        ofBackground(0);
         erodeShader.begin();
         erodeShader.setUniform1i("fast", app->parameterMap[fastErode]);
         src->draw(0,0);
@@ -434,7 +340,7 @@ public:
             }else{
                 ofNoFill();
                 ofSetCircleResolution(100);
-                ofTranslate(0, 0, s);
+                ofCircle(0, 0, s);
                 ofPushMatrix();
                 ofScale(0.5, 0.5);
                 float off = PI/10.0;
@@ -447,7 +353,7 @@ public:
                 ofPopMatrix();
             }
             path.close();
-            //            glLineWidth(app->parameterMap[shapeWeight]);
+//            glLineWidth(app->parameterMap[shapeWeight]);
             for(int i=0;i<app->parameterMap[shapeWeight];i++){
                 ofTranslate(0,1*i);
                 path.draw();
@@ -466,7 +372,7 @@ public:
                 float x = WIDTH/2*i/(float)app->deltaMap[shapeNbPts];
                 if(app->parameterMap[randomShapeColor])
                     ofSetColor(randomColor[colIndex++]);
-                ofDrawRectangle(x-app->parameterMap[shapeWeight]*10/2, -HEIGHT2/2, app->parameterMap[shapeWeight]*10, HEIGHT2);
+                ofRect(x-app->parameterMap[shapeWeight]*10/2, -HEIGHT2/2, app->parameterMap[shapeWeight]*10, HEIGHT2);
             }
         }
         ofPopMatrix();
@@ -481,21 +387,31 @@ public:
         }
         ofSetColor(ofColor::white);
     }
-    
+
     void capture(ofFbo* fbo){
         remanentFbo->begin();
-        fbo->draw(0, HEIGHT, WIDTH, -HEIGHT);
+        fbo->draw(0,0);
+        drawNested();
         remanentFbo->end();
     }
     
-    void drawNested(){  
+    void drawNested(){
         if(nestedScene!=0){
-            alphaShader.begin();
-            alphaShader.setUniform1f("alphaOffset", 1);
+            //            blendShader.load("../shaders/blend");
+            
+            int mode = app->parameterMap[blendType];
+            if(mode==13)
+                blendShader.setUniformTexture("tex1", *remanentFbo, 0);
+            
+            blendShader.begin();
+            blendShader.setUniform1i("mode", mode);
+            blendShader.setUniform1f("thresh", 0.3);
+            //            blendShader.setUniform1f("feedbackCompensation", 1.33);
+            
             ofPushMatrix();
             nestedScene->draw();
             ofPopMatrix();
-            alphaShader.end();
+            blendShader.end();
         }
     }
     
@@ -511,11 +427,17 @@ public:
         app->deltaMap[rot] = app->parameterMap[rot] ;
         app->parameterMap[pitchRot] += app->deltaMap[pitchRot];
         
+//        if(app->deltaMap[scale]<0.7)     app->deltaMap[scale] = 0.7;
+//        if(app->deltaMap[scale]>2.7)    app->deltaMap[scale] = 2.7;
+        
         app->parameterMap[curShapeRot] += app->parameterMap[shapeRot];
         app->deltaMap[curShapeRot] = app->parameterMap[curShapeRot] ;
-        
+
         if(nestedScene!=0)
             nestedScene->update();
+        
+        if(vidPlayer!=0 && drawVid)
+            vidPlayer->update();
         
         for(int i=0;i<points.size();i++){
             points[i].update();
@@ -530,29 +452,16 @@ public:
                 }else{
                     break;
                 }
-                else
-                    while(points.size()<app->parameterMap[nbPoints])
-                        points.push_back(EPoint(ofVec3f(ofRandom(WIDTH), ofRandom(HEIGHT), 0), ofRandom(25)));
-        
+        else
+            while(points.size()<app->parameterMap[nbPoints])
+                points.push_back(EPoint(ofVec3f(ofRandom(WIDTH), ofRandom(HEIGHT), 0), ofRandom(25)));
+    
         if(shapeMeshNb != app->deltaMap[shapeNbPts])
             updateShape();
-        
-        #ifdef CAMERA
-        if(app->parameterMap[camera] > 0){
-            if(!grabby.isInitialized()){
-                grabby.setVerbose(true);
-                grabby.setDeviceID(int(app->parameterMap[camera]));
-                grabby.initGrabber(WIDTH, HEIGHT);
-                grabby.setVerbose(false);
-            }else{
-                grabby.update();
-            }
-        }
-#endif
-        
+    
     }
     void mousePressed(int x, int y, int button){}
-    
+
     void mouseDragged(int x, int y, int button){
     }
     void mouseMoved(int x, int y){}
@@ -560,7 +469,22 @@ public:
     void touchMoved(ofTouchEventArgs &touch){
         
     }
-
+    
+    void staticGlitch() {
+        ofBackground(0);
+        int res = 1;
+        int x, y, h, w;
+        for (int i=0;i<100;i++) {
+            h = int(ofRandom(10));
+            x = int(ofRandom(WIDTH));
+            y = int(ofRandom(HEIGHT2));
+            ofSetColor(ofRandom(220));
+            if (x<WIDTH/2)
+                ofRect(x, y, WIDTH, y+h);
+            else
+                ofRect(0, y, x, y+h);
+        }
+    }
     
     void midiEvent(ofxMidiMessage& eventArgs){
         if(nestedScene!=0){
@@ -569,10 +493,44 @@ public:
         }
     }
     
+    void loadDirectImage(string path){
+        events.push_back("changeImage");
+        imageUzi=true;
+        ofImage img;
+        img.loadImage(path);
+        img.resize(WIDTH,HEIGHT);
+        imgs.push_back(img);
+        imgChoice = imgs.size()-1;
+    }
+    
     void loadImgs() {
-        circleMask.loadImage("assets/maskCircle1280x720.png");
-        
+        for (int i=0;i<9;i++) {
+            stringstream s;
+            s << "./circle/img" << i << ".png";
+            ofImage im;
+            im.loadImage(s.str());
+            im.resize(WIDTH, HEIGHT);
+            imgs.push_back(im);
+        }
+
+            circleMask.loadImage("assets/maskCircle1280x720.png");
+
         circleMask.resize(app->FINALWIDTH, app->FINALHEIGHT);
+    }
+
+    void setResolution(){
+        delete img;
+        delete remanentFbo;
+        delete source;
+        delete source2;
+        img = new ofImage;
+        img->allocate(WIDTH, HEIGHT2, OF_IMAGE_COLOR);
+        remanentFbo = new ofFbo;
+        remanentFbo->allocate(WIDTH, HEIGHT2);
+        source = new ofFbo;
+        source->allocate(WIDTH, HEIGHT2);
+        source2 = new ofFbo;
+        source2->allocate(WIDTH, HEIGHT2);
     }
     
     std::string getInfo(){
@@ -581,15 +539,20 @@ public:
     
     void keyPressed(int key){
         switch(key){
-            case ' ':
+        case ' ':
                 updateShape();
-                break;
+            break;
+        case 'c':{
+            app->parameterMap[randomShapeColor] = !app->parameterMap[randomShapeColor];
+            if(app->parameterMap[randomShapeColor])
+                updateRandomColor();
+        } break;
         }
     }
     
     void updateRandomColor(){
         for(int i=0;i<15;i++){
-            int h = (int(ofRandom(-app->parameterMap[tintAmp]/2,app->parameterMap[tintAmp]/2))*255 + 255) %  255 ;
+            int h = (int( ofRandom(-app->parameterMap[tintAmp]/2,app->parameterMap[tintAmp]/2))*255 + 255) %  255 ;
             randomColor[i] = ofColor::fromHsb(h, 0.8*255, 150);
         }
     }
@@ -605,21 +568,23 @@ public:
     
     
     void loadMacro(TiXmlHandle *xml){
-        updateShape();
-    }
+          updateShape();
+      }
     
     void oscEvent(std::string header, vector<float> args){
     }
     
     void exit(){}
     
-
-    void setResolution(){
+    void setResolution(int res){
+        delete img;
         delete remanentFbo;
         delete source;
         delete source2;
+        img = new ofImage;
+        img->allocate(WIDTH, HEIGHT2, OF_IMAGE_COLOR);
         remanentFbo = new ofFbo;
-        remanentFbo->allocate(WIDTH, HEIGHT2, GL_RGBA);
+        remanentFbo->allocate(WIDTH, HEIGHT2);
         source = new ofFbo;
         source->allocate(WIDTH, HEIGHT2);
         source2 = new ofFbo;
@@ -628,15 +593,22 @@ public:
     
 public:
     ofFbo* source,*source2;
-    
+
+    ofImage* img;
+    ofImage* imgSrc;
     ofFbo* remanentFbo;
     ofImage circleMask;
-    
+    vector<ofImage> imgs;
+    int imgChoice=0;
+
     vector<string> events;
+    bool imageUzi = false;
+    bool drawImg = false, drawVid = false;
     
     string crtImgPath = "",crtVidPath="";
     ofImage crtImg;
-    ofShader shader, invertShader,erodeShader, maskShader;
+    ofShader shader, invertShader,erodeShader, hBackShader;
+    ofVideoPlayer* vidPlayer=0;
     
     //SHAPES
     ofMesh shapeMesh;
@@ -648,14 +620,8 @@ public:
     //NESTED
     Scene *nestedScene=0;
     ofShader alphaShader, blendShader;
-//    ofShader feedbackShader;
-//    ofImage feedbackShaderImage;
-
-    int shapeId = 0;
     
-#ifdef CAMERA
-    ofVideoGrabber grabby;
-#endif
+    int shapeId = 0;
 };
 
 #endif /* defined(__emptyExample__Feedback__) */

@@ -9,12 +9,11 @@ class Print: public Scene{
 public:
     
     Print(AbstractApp* app)
-        :Scene(app, "print"){
-            sceneID = "print";
-
-            
-            font.loadFont("Arial", app->parameterMap[fontSize]);
-            load();
+    :Scene(app, "print"){
+        sceneID = "print";
+        
+        font.loadFont("Arial", app->parameterMap[fontSize]);
+        load();
     }
     
     void load(){
@@ -32,7 +31,7 @@ public:
         //        fonts.push_back("Damascus");
         fonts.push_back("Euphemia UCAS");
         //        fonts.push_back("Farisi");
-//        fonts.push_back("Kai");
+        //        fonts.push_back("Kai");
         //        fonts.push_back("Khmer MN");
         //        fonts.push_back("Kokonor");
         fonts.push_back("Palatino");
@@ -47,7 +46,7 @@ public:
         ofDirectory dir("print/");
         dir.listDir();
         vector<string> strs;
-        for(int i=0;i<dir.numFiles();i++){
+        for(int i=0;i<dir.size();i++){
             string d = dir.getPath(i);
             if(d.find(".txt")!=string::npos){
                 int count = 0;
@@ -57,9 +56,9 @@ public:
                 string delimiter = " ";
                 while (
                        (
-                           ((pos1 = text.find(delimiter)) != std::string::npos)
-                           || ((pos2 = text.find("\n")) != std::string::npos)
-                           )
+                        ((pos1 = text.find(delimiter)) != std::string::npos)
+                        || ((pos2 = text.find("\n")) != std::string::npos)
+                        )
                        && (app->parameterMap[wordLimit] <1 || app->parameterMap[wordLimit] >count)) {
                     int pos = min(pos1, pos2);
                     string token = text.substr(0, pos);
@@ -73,10 +72,11 @@ public:
                     
                 }
             }
-            cout << strs.size() << endl;
             db.push_back(strs);
         }
         //markovAnalysis();
+        
+        loadLexicalInfo();
     }
     
     void markovAnalysis(){
@@ -108,9 +108,8 @@ public:
     }
     void draw(){
         if(ofGetElapsedTimeMillis()-app->parameterMap[txt_lastDate]>=app->parameterMap[txt_rate] || 1==1){
-            ofSetColor(ofColor::black);
-            ofRect(0,0,WIDTH,HEIGHT2);
-            ofSetColor(ofColor::white);
+            ofBackground(0);
+            
             
             float strw = font.stringWidth(currentText);
             float strh = font.stringHeight(currentText);
@@ -143,27 +142,34 @@ public:
         
     }
     
+    void updateFont(){
+        font.loadFont(currentFontFamily, app->parameterMap[fontSize] + ofRandom(-app->parameterMap[txt_randSize],app->parameterMap[txt_randSize]));
+        font.setLineHeight(app->parameterMap[fontSize]);
+    }
+    
     void update(){
         if(ofGetElapsedTimeMillis()-txt_lastDate>=app->parameterMap[txt_rate]){
+            randomTextShift();
+            
+            
             txt_lastDate = ofGetElapsedTimeMillis();
             if(app->parameterMap[randomFont]){
                 int currentFont = ofRandom(fonts.size()-0.01);
                 currentFontFamily = fonts[currentFont];
-                font.loadFont(currentFontFamily, app->parameterMap[fontSize] + ofRandom(-app->parameterMap[txt_randSize],app->parameterMap[txt_randSize]));
-                font.setLineHeight(app->parameterMap[fontSize]);
+                updateFont();
             }
             
             if(app->parameterMap[randomText] || app->parameterMap[seqText]){
                 if(app->parameterMap[randomText]){
-                int tmp;
-                do{
-                    tmp = (int)ofRandom(db[dbIndex].size() - 0.01);
-                }while( tmp==curIndex && db[dbIndex].size()>1
-                        // && markovMap[db[dbIndex][curIndex]][db[dbIndex][tmp]]<4
-                        );
-                curIndex = tmp;
+                    int tmp;
+                    do{
+                        tmp = (int)ofRandom(db[dbIndex].size() - 0.01);
+                    }while( tmp==curIndex && db[dbIndex].size()>1
+                           // && markovMap[db[dbIndex][curIndex]][db[dbIndex][tmp]]<4
+                           );
+                    curIndex = tmp;
                 }else{
-                   curIndex = int((++curIndex) % db[dbIndex].size());
+                    curIndex = int((++curIndex) % db[dbIndex].size());
                 }
                 if(app->parameterMap[txt_accumulate]){
                     currentText.append(db[dbIndex][curIndex]);
@@ -179,58 +185,150 @@ public:
         }
         
         if(app->parameterMap[fontSize]!=font.getSize())
-//            font.loadFont(currentFontFamily, app->parameterMap[fontSize]);
-            font.setLineHeight(app->parameterMap[fontSize]);
-}
+            updateFont();
+        
+    }
+    
+    void loadLexicalInfo(){
+        ofDirectory dir("print/synonyms/");
+        dir.listDir();
+        vector<string> strs;
+        for(int i=0;i<dir.size();i++){
+            string d = dir.getPath(i);
+            
+            if(strEndsWith(d, ".txt")){
+                string t = ofBufferFromFile(d).getText();
+                if(t.compare("")){
+                    vector<string> entry;
+                    vector<string> lines = ofSplitString(t, "\n");
+                    for(string line : lines){
+                        entry.push_back(line);
+                    }
+                    synonymsDB.push_back(entry);
+                }
+            }
+        }
+    }
+    
+    void analyzeCurrentText(){
+        words.clear();
+        textAnalysis.clear();
+        
+        string currentArticle = "";
+        
+        vector<string> _words = ofSplitString(currentText, " ");
+        for(int i = 0;i<_words.size();i++){
+            string w = _words[i];
+            if(isArticle(w)){
+                currentArticle = w;
+                if(w.compare("l'"))
+                    currentArticle += " ";
+            }else{
+                words.push_back(currentArticle + w);
+                currentArticle = "";
+            }
+        }
+        
+        
+        for(string word : words)
+        {
+            int dbIndex = -1;
+            int index = 0;
+            for(vector<string> db : synonymsDB){
+                for(string entry : db){
+                    if(!entry.compare(word)){
+                        dbIndex = index;
+                        break;
+                    }
+                }
+                if(dbIndex>=0)
+                    break;
+                index ++;
+            }
+            textAnalysis.push_back(dbIndex);
+        }
+    }
+    
+    bool isArticle(string word){
+        if(!word.compare("l'")
+           || !word.compare("un")
+           || !word.compare("une")
+           || !word.compare("le")
+           || !word.compare("la")
+           )
+            return true;
+        return false;
+    }
+    
+    string stripArticle(string word){
+        ofStringReplace(word, "l'", "");
+        ofStringReplace(word, "la ", "");
+        ofStringReplace(word, "le ", "");
+        ofStringReplace(word, "un ", "");
+        ofStringReplace(word, "une ", "");
+        return word;
+    }
+    
+    void randomTextShift(){
+        int index = -1;
+        string txt;
+        for(int i=0;i<words.size();i++){
+            int dbIndex = textAnalysis[i];
+            if(dbIndex >=0){
+                txt += synonymsDB[dbIndex][ofRandom(synonymsDB[dbIndex].size())];
+            }else
+                txt += words[i];
+            txt += " ";
+        }
+        currentText = txt;
+    }
     
     void mousePressed(int x, int y, int button){}
-  void mouseDragged(int x, int y, int button){
-        
-    }
+    void mouseDragged(int x, int y, int button){}
+    
     void mouseMoved(int x, int y){}
+    
+    void touchMoved(ofTouchEventArgs &touch){}
+    
+    void keyPressed(int key){}
+    
+    void midiEvent(ofxMidiMessage& eventArgs){}
 
-    void touchMoved(ofTouchEventArgs &touch){
-        
-    }
+    void oscEvent(std::string header, std::string arg){}
     
-    void keyPressed(int key){
-        
-    }
-    
-    void midiEvent(ofxMidiMessage& eventArgs){
-        
-    }
-    void oscEvent(std::string header, std::string arg){
-        
-    }
-    void oscEvent(std::string header, std::vector<float> args){
-        
-    }
+    void oscEvent(std::string header, std::vector<float> args){}
     
     void saveMacro(stringstream *xml){
         (*xml) << "<print>" << endl;
         
         (*xml) << "<currentText>" << currentText << "</currentText>" << endl;
         (*xml) << "<currentFontFamily>" << currentFontFamily << "</currentFontFamily>" << endl;
-
+        
         (*xml) << "</print>" << endl;
-
+        
     }
     
-    void loadMacro(ofXml *xml){
-        xml->setTo("print");
+    void loadMacro(TiXmlHandle *xml){
+        TiXmlHandle pXml = xml->FirstChild("print");
         
-        currentText = xml->getValue("currentText");
-        currentFontFamily = xml->getValue("currentFontFamily");
+        if(pXml.FirstChild("currentText").ToElement() != NULL){
+            currentText = pXml.FirstChild("currentText").ToElement()->GetText();
+        }
         
-        xml->setToParent();
+        if(pXml.FirstChild("currentFontFamily").ToElement() != NULL){
+            currentFontFamily = pXml.FirstChild("currentFontFamily").ToElement()->GetText();
+        }
         
-        font.loadFont(currentFontFamily, app->parameterMap[fontSize] + ofRandom(-app->parameterMap[txt_randSize],app->parameterMap[txt_randSize]));
-        font.setLineHeight(app->parameterMap[fontSize]);
+        updateFont();
     }
     
     std::string getInfo(){
         return "";
+    }
+    
+    void setText(string text){
+        currentText = text;
+        analyzeCurrentText();
     }
     
     bool isBackground(){return back;}
@@ -248,6 +346,10 @@ public:
     ofTrueTypeFont font;
     
     std::map<std::string, std::map<std::string, float> > markovMap;
+    
+    std::vector< std::vector<string> > synonymsDB;
+    std::vector<int> textAnalysis;
+    std::vector<string> words;
 };
 
 

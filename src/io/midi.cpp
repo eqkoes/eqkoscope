@@ -1,7 +1,7 @@
 #include "eqkoscope.h"
 #include <string>
 
-int NB_MIDI_PORTS = 8;
+int NB_MIDI_PORTS = 5;
 
 int lastMidiAftertouch= 0;
 
@@ -17,12 +17,21 @@ void eqkoscope::sendControlChange(int channel, int control, int value){
 
 void eqkoscope::initMidi(){
     try{
-    loadMapping(ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory()+"/../../../"+MIDIMapPath).getText(), true, true);
+        loadMappingFiles(MIDIMapPath, true, true);
+        ofFile midiLearntFile("midiLearnt.csv");
+        if(midiLearntFile.exists()){
+            string str = ofBufferFromFile("midiLearnt.csv").getText();
+            loadMapping(str, true, false);
+        }else
+            midiLearntFile.create();
     
-    launchpadOut = ofxMidiOut("Launchpad S");
-    launchpadOut.openPort("Launchpad S");
+    launchpadOut = ofxMidiOut(MACRO_INTERFACE);
+    launchpadOut.openPort(MACRO_INTERFACE);
     
-    openPorts();
+        gerardpadOut = ofxMidiOut(GERARD_INTERFACE);
+        gerardpadOut.openPort(GERARD_INTERFACE);
+        
+    openPorts(true);
     
     midiOut.openVirtualPort();
     
@@ -68,7 +77,7 @@ void eqkoscope::initOfflineMIDI(){
 }
 
 void eqkoscope::updateOfflineMIDI(){
-    offlineDate += 1000.0/restrictFrameRate;
+    offlineDate += 1000.0/maxFrameRate;
         while(offlineMsgDates[offlineMsgsIndex] <= offlineDate && offlineMsgsIndex<offlineMsgs.size()){
             newMidiMessage(offlineMsgs[offlineMsgsIndex]);
             offlineMsgsIndex++;
@@ -82,53 +91,98 @@ void eqkoscope::updateOfflineMIDI(){
 }
 
 void eqkoscope::resetMidi(){
-    launchpadOut.openPort("Launchpad S");
-    
-    //    ofxMidiIn::listPorts(); //todo exception handler
-    openPorts();
+   // launchpadOut.openPort(MACRO_INTERFACE);
+    openPorts(true);
 }
 
-void eqkoscope::openPorts(){
-    midiIns.clear();
-    std::vector<int> ports;
-    for(int i=0;i<NB_MIDI_PORTS;i++)
-        ports.push_back(i);
-    
-    for(int i=0;i<ports.size();i++){
-        ofxMidiIn in = ofxMidiIn();
-        in.setVerbose(false);
-        in.openPort(ports[i]);
-        if(in.isOpen()){
-            if(in.getName().compare("Komplete Audio 6") //forbidden port names
-               //               && in.getName().compare("nanoKONTROL2 SLIDER/KNOB")
-               //&& in.getName().compare("APC Key 25")
-               ){
-//                cout << "midi port opened " << in.getName() << endl;
+void eqkoscope::openPorts(bool init){
+        
+    if(init){
+        for(int i=0;i<midiIns.size();i++){
+            midiIns[i].closePort();
+        }
+            midiIns.clear();
+            for(int i=0;i<NB_MIDI_PORTS;i++){
+                ofxMidiIn in = ofxMidiIn();
+                in.setVerbose(false);
                 in.addListener(this);
                 in.ignoreTypes(false, false, false);
                 midiIns.push_back(in);
-//                cout << "MIDI PORT OK " << in.getName() << endl;
-                if(!in.getName().compare("Launchpad S"))
-                    is_launchpad = true;
-                if(strStartsWith(in.getName(), "SL MkII Port"))
-                    is_novation = true;
-                if(!in.getName().compare(MPD_DEVICE) || !in.getName().compare("Akai MPD24"))
-                    is_io2 = true;
-                if(!in.getName().compare(EXTERNAL_MIDI_DEVICE))
-                        is_external_device = true;
-            }else{
-                in.closePort();
+        }
+    }
+    
+    ///check if ports are opened. If not open'em !
+    
+    try{
+    for(int i=0;i<NB_MIDI_PORTS;i++){
+//        ofxMidiIn in = ofxMidiIn();
+        ofxMidiIn *in = &(midiIns[i]);
+//        in.setVerbose(false);
+        
+        in->closePort(); //bourrin...
+        if( ! in->isOpen() ){
+            cout << "OPENING MIDI PORT " << in->getName() << " ... ";
+            in->openPort(i);
+            
+            if(!string(MACRO_INTERFACE).empty() && !in->getName().compare(MACRO_INTERFACE)){
+//                if(!launchpadOut.isOpen()){
+                    launchpadOut.openPort(MACRO_INTERFACE);
+                    if(launchpadOut.isOpen())
+                        paintMacros();
+//                }
             }
         }
+ 
+        if( in->isOpen() ){
+//                in.addListener(this);
+//                in->ignoreTypes(false, false, false);
+//                midiIns.push_back(in);
+                cout << "MIDI PORT OPENED " << in->getName() << endl;
+                MIDI_device_connected[in->getName()] = true;
+    }
+        }
+    }catch(exception e){
+        cout << e.what() << endl;
     }
 }
 
+//gruesomly bourrin !
+void eqkoscope::makeSureMIDIOutDeviceIsOpen(){
+    
+//    try{
+//        
+//        for(int i=0;i<midiIns.size();i++){
+//            ofxMidiIn *in = &(midiIns[i]);
+//            string name = convertMIDIName(in->getName());
+//            // if(!name.empty() &&  ! in->isOpen() ){
+//            //                cout << "OPENING MIDI PORT " << name << " ... ";
+//            in->openPort(i);
+//            //MIDI_device_connected[name] = false;
+//            //}
+//            if( in->isOpen() ){
+//                //                cout << "MIDI PORT OPENED " << name << endl;
+//                MIDI_device_connected[name] = true;
+//            }
+//        }
+//    }catch(exception e){
+//        cout << e.what() << endl;
+//    }
+
+    launchpadOut.openPort(MACRO_INTERFACE);
+
+    paintMacros();
+    
+}
+
 void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
-#ifndef SLAVE
-    tcpClient.sendRawMsg((char*)(&eventArgs), sizeof(ofxMidiMessage));
-//    cout << "send tcp mess " << ofGetFrameNum() << endl;
-    return;
-#endif
+    
+    if(!eventArgs.portName.compare("MIDI Guitar") || !eventArgs.portName.compare("IAC Driver Bus 1"))
+        eventArgs.channel = 10;
+    
+    if(MIDI_check_listen && eventArgs.portNum<MIDI_MAX_NB_PORTS && !MIDI_check_ports[eventArgs.portNum]){
+        MIDI_check_ports[eventArgs.portNum] = true;
+        MIDI_check_portNames[eventArgs.portNum] = eventArgs.portName;
+    }
     
     
  if(eventArgs.channel == 16)
@@ -195,7 +249,7 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
     
     /** MACROS **/
     
-    if(eventArgs.portName.compare("Launchpad S")){
+   /* if(eventArgs.portName.compare("Launchpad S")){
         
         if(type==MIDI_NOTEON && id==120){ // C8
             loadNextMacro();
@@ -207,15 +261,25 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
             return;
         }
         
+        if(type==MIDI_CC && id==105 && value>0){ // C8
+            loadNextMacro();
+            return;
+        }
+        
+        if(type==MIDI_CC && id==104 && value>0){ // B8
+            loadPrevMacro();
+            return;
+        }
+        
         if(type==MIDI_NOTEON && id==118){ // A#7
             loadFirstMacro();
             return;
-        }
+        }*/
         
     switch(eventArgs.status){
         case MIDI_NOTE_ON:{
             for(int i=0;i<midiNoteonAutos.size();i++){
-                if(midiNoteonAutos[i]->channel == channel && ((midiNoteonAutos[i]->minId<= eventArgs.pitch && midiNoteonAutos[i]->maxId>= eventArgs.pitch) || midiNoteonAutos[i]->minId==0)){
+                if((midiNoteonAutos[i]->channel==0 || midiNoteonAutos[i]->channel == channel) && ((midiNoteonAutos[i]->minId<= eventArgs.pitch && midiNoteonAutos[i]->maxId>= eventArgs.pitch) || midiNoteonAutos[i]->minId==0)){
                     if(midiNoteonAutos[i]->minId != midiNoteonAutos[i]->maxId){
                         midiNoteonAutos[i]->update(ofMap(eventArgs.pitch, midiNoteonAutos[i]->minId, midiNoteonAutos[i]->maxId, 0, 1));
                     }else{
@@ -224,8 +288,17 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
                     override = true;
                 }
             }
-            if(eventArgs.portNum!=-2 && noteAutoFastMap[channel-1][id-1].size()>0){ //factory
-                for(Auto* a : noteAutoFastMap[channel-1][id-1]){
+            if(eventArgs.portNum!=-2 && noteAutoFastMap[channel][id-1].size()>0){ //factory
+                for(Auto* a : noteAutoFastMap[channel][id-1]){
+                    if(a->minId != a->maxId){
+                        a->update(ofMap(eventArgs.pitch, a->minId, a->maxId, 0, 1));
+                    }else{
+                        a->update(eventArgs.velocity/127.0);
+                    }
+                }
+            }
+            if(eventArgs.portNum!=-2 && noteAutoFastMap[0][id-1].size()>0){ //factory
+                for(Auto* a : noteAutoFastMap[0][id-1]){
                     if(a->minId != a->maxId){
                         a->update(ofMap(eventArgs.pitch, a->minId, a->maxId, 0, 1));
                     }else{
@@ -236,29 +309,44 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
         } break;
         case MIDI_NOTE_OFF:{
             for(int i=0;i<midiNoteonAutos.size();i++){
-                if(midiNoteonAutos[i]->hold && midiNoteonAutos[i]->channel == channel && ((midiNoteonAutos[i]->minId<= eventArgs.pitch && midiNoteonAutos[i]->maxId>= eventArgs.pitch) || midiNoteonAutos[i]->minId==0)){
+                if(midiNoteonAutos[i]->hold && (midiNoteonAutos[i]->channel==0 || midiNoteonAutos[i]->channel == channel) && ((midiNoteonAutos[i]->minId<= eventArgs.pitch && midiNoteonAutos[i]->maxId>= eventArgs.pitch) || midiNoteonAutos[i]->minId==0)){
                     midiNoteonAutos[i]->update(0);
                     override = true;
                 }
             }
-            if(eventArgs.portNum!=-2 && noteAutoFastMap[channel-1][id-1].size()>0){ //factory
-                for(Auto* a : noteAutoFastMap[channel-1][id-1]){
+            if(eventArgs.portNum!=-2 && noteAutoFastMap[channel][id-1].size()>0){ //factory
+                for(Auto* a : noteAutoFastMap[channel][id-1]){
                     if(a->hold){
                         a->update(0);
                         override = true;
                     }
                 }
             }
+            if(eventArgs.portNum!=-2 && noteAutoFastMap[0][id-1].size()>0){ //factory
+                for(Auto* a : noteAutoFastMap[0][id-1]){
+                    if(a->hold){
+                        a->update(0);
+                        override = true;
+                    }
+                }
+            }
+
         } break;
         case MIDI_CONTROL_CHANGE:{
             for(int i=0;i<midiCCAutos.size();i++){
-                if(midiCCAutos[i]->channel == channel && midiCCAutos[i]->minId == id){
+                if((midiCCAutos[i]->channel==0 || midiCCAutos[i]->channel == channel) && midiCCAutos[i]->minId == id){
                     midiCCAutos[i]->update(eventArgs.value/127.0);
                     override = true;
                 }
             }
-            if(eventArgs.portNum!=-2 && ccAutoFastMap[channel-1][id-1].size()>0){ //factory
-                for(Auto* a : ccAutoFastMap[channel-1][id-1]){
+            if(eventArgs.portNum!=-2 && ccAutoFastMap[channel][id-1].size()>0){ //factory
+                for(Auto* a : ccAutoFastMap[channel][id-1]){
+                    a->update(eventArgs.value/127.0);
+                    //                        override = true;
+                }
+            }
+            if(eventArgs.portNum!=-2 && ccAutoFastMap[0][id-1].size()>0){ //factory
+                for(Auto* a : ccAutoFastMap[0][id-1]){
                     a->update(eventArgs.value/127.0);
                     //                        override = true;
                 }
@@ -266,10 +354,8 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
         }break;
         default:;
     }
-    }
+//    }
     
-    if(!eventArgs.portName.compare("IAC Driver Bus 1") || !eventArgs.portName.compare(EXTERNAL_MIDI_DEVICE)) // do not process musical MIDI automations
-        return;
     
     if(!override){
         midiMutex.lock();
@@ -286,7 +372,7 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
         midiNoteonAutos.clear();
         
         initParameters();
-        loadMapping(ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory()+"/../../../"+MIDIMapPath).getText(), true, true);
+        loadMappingFiles(MIDIMapPath, true, true);
         loadMacroMap();
         
         analyzeMacros();
@@ -299,14 +385,11 @@ void eqkoscope::newMidiMessage(ofxMidiMessage& eventArgs){
 }
 
 void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
-#ifdef MPD24
-    if(eventArgs.status==MIDI_CONTROL_CHANGE && eventArgs.channel==3 &&
-       eventArgs.control==7)
-        eventArgs.control = 9;
-#endif
     
     if(ofGetFrameNum()<3)
         return;
+    
+    /// HACKS AND SPECIAL STUFF
     
     if(parameterMap[bypassCTRL] && !eventArgs.portName.compare("Launch Control XL") //hack for bypass with launch XL
        && eventArgs.pitch!=92)
@@ -317,26 +400,57 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
         return;
     }
     
-    if(eventArgs.status==MIDI_AFTERTOUCH && eventArgs.channel==2){
-        //            cout << "aftertouc " << eventArgs.pitch << endl;
-        //            liveMidiEffect(lastMidiAftertouch, eventArgs.value/127.0, true);
-        
-        //            ofxMidiMessage msg;
-        //            msg.pitch = eventArgs.pitch;
-        //            msg.status = MIDI_NOTE_ON;
-        //            msg.velocity = eventArgs.velocity;
-        //            newMidiMessage(msg);
-        return;
-    }
-    
-    if(eventArgs.status==MIDI_CONTROL_CHANGE && eventArgs.channel==assignChannel && eventArgs.control==100){
-        deltaMap[featuredParameter] = parameterMap[featuredParameter] = eventArgs.value / 127.0;
-        return;
-    }
-    
-    if(eventArgs.status==MIDI_NOTE_ON && eventArgs.channel==1 && eventArgs.pitch==91){
+ /*   if(eventArgs.status==MIDI_NOTE_ON && eventArgs.channel==1 && eventArgs.pitch==91){
         eraseControlMapping(false); //kill all user automations
         return;
+    }*/
+    
+    
+    if(midiLearn >= 0){
+        ofFile midiLearnFile("midiLearnt.csv", ofFile::ReadWrite);
+        
+        Auto* a = new Auto(this, midiLearn);
+        a->values.push_back(parametersInGUIBounds[a->parameterID].x);
+        a->values.push_back(parametersInGUIBounds[a->parameterID].y);
+        a->smoothing = 0.7;
+        a->channel = eventArgs.channel;
+        a->midiLearnt = true;
+
+        switch(eventArgs.status){
+            case MIDI_NOTE_ON:{
+                a->type = MIDION;
+                a->minId = a->maxId = eventArgs.pitch;
+                factorymidiNoteonAutos.push_back(a);
+                automationsSanityCheck(&factorymidiNoteonAutos);
+                for(int id=a->minId;id<=a->maxId;id++)
+                    noteAutoFastMap[a->channel][id-1].push_back(factorymidiNoteonAutos[factorymidiNoteonAutos.size()-1]);
+            } break;
+            case MIDI_CONTROL_CHANGE:{
+                a->type = MIDICC;
+                a->minId = a->maxId = eventArgs.control;
+                factorymidiCCAutos.push_back(a);
+                automationsSanityCheck(&factorymidiCCAutos);
+                ccAutoFastMap[a->channel][a->minId-1].push_back(factorymidiCCAutos[factorymidiCCAutos.size()-1]);
+            } break;
+            default:;
+        }
+        
+        
+        stringstream str;
+        for(Auto* fa : factorymidiNoteonAutos)
+            if(fa->midiLearnt)
+            str << fa->toString() << endl;
+        for(Auto* fa : factorymidiCCAutos)
+            if(fa->midiLearnt)
+                str << fa->toString() << endl;
+        
+        midiLearnFile.clear();
+        
+        midiLearnFile << str.str() << endl;
+        
+        midiLearnFile.close();
+        
+        midiLearn = -1;
     }
     
     if(!eventArgs.portName.compare("IAC Driver Bus 1")){
@@ -367,12 +481,16 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
             return;
         }
         
-        if(type==MIDI_NOTEON && id==120){ // C8
+        /// MACROS/SAVE
+        
+        if((type==MIDI_NOTEON && id==120)
+           || (type==MIDI_CC && id==120)){ // C8
             loadNextMacro();
             return;
         }
         
-        if(type==MIDI_NOTEON && id==119){ // B7
+        if((type==MIDI_NOTEON && id==119)
+           || (type==MIDI_CC && id==119)){ // B7
             loadFirstMacro();
             return;
         }
@@ -407,25 +525,16 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
     }
     
     
-    if(eventArgs.channel == 1 || eventArgs.channel == 3 || eventArgs.channel == 4 || (eventArgs.channel == 2 && eventArgs.control==91)){ //regular interfaces
-        if(scenes[parameterMap[currentScene]]==feedbackScene && parameterMap[embedUzi] && eventArgs.pitch>=52){
-            eventArgs.pitch -= 16;
-            uzi->midiEvent(eventArgs);
-        }else{
-            bool alluzis = false;
-            if(!alluzis)
-                if(scenes[parameterMap[currentScene]]!=0)
-                    scenes[parameterMap[currentScene]]->midiEvent(eventArgs);
-        }
-    }
+    /// MACROS LOAD
     
     float value = eventArgs.value;
     switch(eventArgs.status){
         case MIDI_CONTROL_CHANGE:{
-            logfile << ofGetElapsedTimeMillis() << " MIDI CC " << eventArgs.control << " " << value << endl;
+//            logfile << ofGetElapsedTimeMillis() << " MIDI CC " << eventArgs.control << " " << value << endl;
             switch(eventArgs.channel){
                 case 1 :{
-                    if(!eventArgs.portName.compare("Launchpad S")){
+#ifndef MACRO_APC
+                    if(!eventArgs.portName.compare(MACRO_INTERFACE)){
                         switch(eventArgs.control){
                             case 104:{
                                 if(value==127)             setMacroPage(macroPage - 1);
@@ -441,21 +550,8 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
                             }break;
                         }
                     }
+#endif
                 }break;
-                case 2:{
-                    switch(eventArgs.control){
-                        case 1:
-                            modWheel = value;
-                            break;
-                    }
-                }break;
-                case 3:{
-                    switch(eventArgs.control){
-                        case 100:
-                            currentParamIntensity = value/127.0f;
-                            break;
-                    }
-                }
             }
         }break;
         case MIDI_NOTE_ON:{
@@ -464,25 +560,43 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
             int pitch = eventArgs.pitch;
             switch(eventArgs.channel){
                 case 1 :{
-                    if(!eventArgs.portName.compare("Launchpad S") &&
-                       ((pitch>=0 && pitch<=8) || (pitch>=16 && pitch<=24)
-                        || (pitch>=32 && pitch<=40) || (pitch>=48 && pitch<=56)
-                        || (pitch>=64 && pitch<=72) || (pitch>=80 && pitch<=88)
-                        || (pitch>=96 && pitch<=104) || (pitch>=112 && pitch<=120))){
-                           pitch += 128*macroPage;
-                           string path = getMacroFromMIDI(pitch);
-                           if(path.empty())
-                               break;
-                           setMacroCode(pitch);
-                           if(eventArgs.velocity>0){ // A FAIRE POUR LE RESTE
-                               if(saveMacros){
-                                   saveMacro(path);
-                                   saveMacros = false;
-                               }else{
-                                   loadMacro(path);
-                               }
-                           }
-                       }
+                    if(!eventArgs.portName.compare(MACRO_INTERFACE)){
+                        int macroCode;
+#ifdef MACRO_APC
+                        if(pitch == 65){ //yes this is spaghetto
+                            setMacroPage(macroPage - 1);
+                            return;
+                        }else if(pitch == 64){
+                            setMacroPage(macroPage + 1);
+                            return;
+                        }else if(pitch == 67){
+                            loadNextMacro();
+                            return;
+                        }
+
+                        if(pitch>=0 && pitch <= NB_MACRO_PER_PAGE){
+                            macroCode = getMacroPitch(eventArgs.pitch);
+#else
+                            macroCode = getMacroPitch(eventArgs.pitch);
+                            if((pitch>=0 && pitch<=8) || (pitch>=16 && pitch<=24)
+                               || (pitch>=32 && pitch<=40) || (pitch>=48 && pitch<=56)
+                               || (pitch>=64 && pitch<=72) || (pitch>=80 && pitch<=88)
+                               || (pitch>=96 && pitch<=104) || (pitch>=112 && pitch<=120)){
+#endif
+                                string path = getMacroFromMIDI(macroCode);
+                                if(path.empty())
+                                    break;
+                                setMacroCode(pitch);
+                                if(eventArgs.velocity>0){
+                                    if(saveMacros){
+                                        saveMacro(path);
+                                        saveMacros = false;
+                                    }else{
+                                        loadMacro(path);
+                                    }
+                                }
+                            }
+                        }
                 }break;
                 case 2:{ // MPD 32
                     switch(pitch){
@@ -496,7 +610,7 @@ void eqkoscope::parseMidi(ofxMidiMessage eventArgs){
         }break;
         case MIDI_NOTE_OFF:{
             int pitch = eventArgs.pitch;
-            logfile << ofGetElapsedTimeMillis() << " MIDI NOTEOFF " << eventArgs.pitch << " " << value << endl;
+//            logfile << ofGetElapsedTimeMillis() << " MIDI NOTEOFF " << eventArgs.pitch << " " << value << endl;
             switch(eventArgs.channel){
                 case 3 :{
                     switch(pitch){
@@ -521,40 +635,30 @@ void eqkoscope::liveMidiEffect(int code, float intensity, bool on){
 
 void eqkoscope::updateMidi(){
     if(ofGetFrameNum()%100==0){
-        is_io2 = is_external_device = is_novation = is_launchpad = false;
+        for(map<string, bool>::iterator i=MIDI_device_connected.begin();i!=MIDI_device_connected.end();i++)
+            i->second = false;
         for(int i=0;i<NB_MIDI_PORTS;i++){
             try{
-                ofxMidiIn in = ofxMidiIn();
-                in.setVerbose(false);
-                in.openPort(i);
-                string name = in.getName();
-                if(enforce_launchControl)
-                    if(in.isOpen() && (!name.compare(LAUNCHCONTROL_DEVICE)))
-                        is_launchControl = true;
-                if(enforce_mpd24)
-                    if(in.isOpen() && (!name.compare(MPD24_DEVICE)))
-                        is_mpd24 = true;
-                if(enforce_io2)
-                    if(in.isOpen() && (!name.compare(MPD_DEVICE) || !name.compare("Akai MPD24")))
-                        is_io2 = true;
-                if(enforce_external_device)
-                    if(in.isOpen() && (!name.compare(EXTERNAL_MIDI_DEVICE)))
-                        is_external_device = true;
-                if(enforce_novation)
-                    if(in.isOpen() && strStartsWith(name, "SL MkII Port"))
-                        is_novation = true;
-                if(enforce_launchpad)
-                    if(in.isOpen() && !name .compare("Launchpad S"))
-                        is_launchpad = true;
-                if(enforce_nano)
-                    if(in.isOpen() && !name.compare("nanoKONTROL2 SLIDER/KNOB"))
-                        is_nano = true;
-            }catch(exception e){}
+                ofxMidiIn* in = &(midiIns[i]);
+                string name = in->getName();
+                if(in->isOpen() && name.compare("") && MIDI_device_connected.count(in->getName()))
+                    MIDI_device_connected[in->getName()] = true;
+                }catch(exception e){}
         }
-        if((enforce_mpd24 && !is_mpd24) ||(enforce_launchControl && !is_launchControl) ||
-           (enforce_io2 && !is_io2) || (enforce_novation && !is_novation) || (enforce_launchpad && !is_launchpad) || (enforce_nano && !is_nano) || (enforce_external_device && !is_external_device)){
-            openPorts();
+        ///reopen ports if disconnected
+        for(map<string, bool>::iterator i=MIDI_device_connected.begin();i!=MIDI_device_connected.end();i++){
+            if(!i->second){
+                openPorts(false);
+                break;
+            }
         }
+        /// check macro connection
+//        if(!string(MACRO_INTERFACE).empty() && !launchpadOut.isOpen()){
+//            launchpadOut.openPort(MACRO_INTERFACE);
+//            if(launchpadOut.isOpen())
+//                paintMacros();
+//        }
+        makeSureMIDIOutDeviceIsOpen();
     }
     programChangeFlag = 0;
 }

@@ -1,15 +1,20 @@
 #include "eqkoscope.h"
 #include "ofFileUtils.h"
+#include "../libs/tinyxml.h"
 
-int analysis[128*MAX_MACRO_PAGES];
+
+
+static int analysis[NB_MACRO_PER_PAGE*MAX_MACRO_PAGES];
 string macroComments;
-
-vector<string> videosToPreload;
 
 void eqkoscope::loadMacroMap(){
     stringstream path;
+    if(!strEndsWith(macroPath, "/")){
+        macroPath += "/";
+    }
     path << macroPath << "macroMap.csv";
     string t = ofBufferFromFile(path.str()).getText();
+    ofStringReplace(t, "\r", "\n");
     if(t.compare("")){
         vector<string> lines = ofSplitString(t, "\n");
         for(int x=0;x<lines.size();x++){
@@ -24,7 +29,11 @@ void eqkoscope::loadMacroMap(){
                 p = ofToInt(codeStr);
             else{
                 vector<string > cc = ofSplitString(codeStr, "x");
+#ifdef MACRO_APC
+                p = ofToInt(cc[0])*8 + ofToInt(cc[1]);
+#else
                 p = ofToInt(cc[0])*16 + ofToInt(cc[1]);
+#endif
             }
             string value = fields[1];
             macroMap[p] = value;
@@ -41,7 +50,7 @@ void eqkoscope::setMacroPage(int page){
 }
 
 void eqkoscope::setMacroCode(int c){
-    if(currentMacroCode>=0 && currentMacroCode<=128*MAX_MACRO_PAGES)
+    if(currentMacroCode>=0 && currentMacroCode<=NB_MACRO_PER_PAGE*MAX_MACRO_PAGES)
         launchpadOut.sendNoteOn(1, currentMacroCode, analysis[currentMacroCode]);
     currentMacroCode = c;
 }
@@ -55,31 +64,52 @@ void eqkoscope::updateMacros(){
         launchpadOut.sendControlChange(1, 107, 0);
     
     int r2 = 10;
+    int macroPitch = currentMacroCode - macroPage*NB_MACRO_PER_PAGE;
     if(f%r2==0) //current
-        launchpadOut.sendNoteOn(1, currentMacroCode, 0);
+        launchpadOut.sendNoteOn(1, macroPitch, 0);
     if(f%r2==r2/2)
-        launchpadOut.sendNoteOn(1, currentMacroCode, analysis[currentMacroCode + macroPage*128]);
+        launchpadOut.sendNoteOn(1, macroPitch, analysis[currentMacroCode + macroPage*NB_MACRO_PER_PAGE]);
+    
+    if(deltaMap[_loadMacro] == 1){
+        loadNextMacro();
+        deltaMap[_loadMacro] = 0;
+    }
+    
+    if(deltaMap[_loadMacro] == -1){
+        loadPrevMacro();
+        deltaMap[_loadMacro] = 0;
+    }
 }
 
 void eqkoscope::analyzeMacros(){
     
-    videosToPreload.clear();
-    
-    if(!is_launchpad)
+    if( ! (MIDI_device_connected.count(MACRO_INTERFACE) &&  MIDI_device_connected[MACRO_INTERFACE])){
         return;
+    }
+    
+//#ifdef OF_10
+#ifdef MACRO_APC
+    int feedbackCode = 3;
+    int cinemaCode = 1;
+    int uziCode = 5;
+    int linesCode = 3;
+    int drawCode = 3;
+#else
     
     int feedbackCode = 15;
     int cinemaCode = 60;
     int uziCode = 62;
     int linesCode = 62;
     int drawCode = 29;
+#endif
     int printCode = 62;
     int triCode = 63;
     int fractalCode = 30;
     int ledCode = 30;
     
     int sceneCode;
-    for(int i=0;i<128*MAX_MACRO_PAGES;i++){
+    for(int i=0;i<NB_MACRO_PER_PAGE*MAX_MACRO_PAGES;i++){
+        analysis[i] = 0;
         string p = getMacroFromMIDI(i);
         if(p.empty())
             continue;
@@ -89,63 +119,52 @@ void eqkoscope::analyzeMacros(){
             sceneCode = 0;
             string cinemaStr = "";
             
-            ofBuffer buffer = file.readToBuffer();
-            ofXml macro;
-            macro.loadFromBuffer(buffer.getText());
+//            ofBuffer buffer = file.readToBuffer();
+//            ofXml macro;
+//            macro.load(buffer.getText());
             
-            if(!macro.getAttribute("version").compare("v2")){
-                
-                macro.setTo("FX");
-                macro.setTo("triumMode");
-                float v = macro.getFloatValue();
-                if(v!=0)
-                    sceneCode = triCode;
-                macro.setToParent();
-                macro.setToParent();
-            }
+            TiXmlDocument 	doc;
+            bool loadOkay = doc.LoadFile(file.getAbsolutePath());
+            TiXmlHandle macro = TiXmlHandle(&doc).ToNode()->FirstChild();
             
-            if(!macro.exists("scenes")){
+            TiXmlHandle scenes_xml = macro.FirstChild("scenes");
+            if(! scenes_xml.ToNode()){
                 sceneCode = ledCode;
             }else{
-                if(sceneCode != triCode){
-                    if(!macro.exists("scenes")){ //old solo scene loading
-                        if(macro.exists("feedback"))
-                            sceneCode = feedbackCode;
-                        if(macro.exists("uzi"))
-                            sceneCode = uziCode;
-                        if(macro.exists("cinema")){
-                            sceneCode = cinemaCode;
-                            macro.setTo("cinema");
-                            cinemaStr = macro.getValue("vidPath0");
-                            videosToPreload.push_back(cinemaStr);
-                            macro.setToParent();
-                        }
-                        if(macro.exists("print"))
-                            sceneCode = printCode;
-                        if(macro.exists("lines")){
-                            sceneCode = linesCode;
+                if(scenes_xml.ToNode()){ //old solo scene loading
+                    if(scenes_xml.FirstChild().ToNode()->FirstChild("feedback"))
+                        sceneCode = feedbackCode;
+                    if(scenes_xml.FirstChild().ToNode()->FirstChild("uzi"))
+                        sceneCode = uziCode;
+                    if(scenes_xml.FirstChild().ToNode()->FirstChild("cinema")){
+                        sceneCode = cinemaCode;
+                    }
+                    if(scenes_xml.FirstChild().ToNode()->FirstChild("print"))
+                        sceneCode = printCode;
+                    if(scenes_xml.FirstChild().ToNode()->FirstChild("lines")){
+                        sceneCode = linesCode;
+                    }
+                    
+                }else{
+                    TiXmlHandle scenes_child_xml = scenes_xml.FirstChild();
+                    for(int i=0;i<3;i++){
+                        
+                        if(!scenes_child_xml.ToNode()){
+                            continue;
                         }
                         
-                    }else{
-                        macro.setTo("scenes");
-                        for(int i=0;i<3;i++){
-                            bool ret = macro.setToChild(i); //<scene>
-                            if(!ret){
-                                continue;
-                            }
-                            
-                            string layerStr = macro.getAttribute("layer");
-                            int layer = 0;
-                            if(!layerStr.compare("1"))
-                                layer = 1;
-                            else
-                                if(!layerStr.compare("2"))
-                                    layer = 2;
-                            
-                            macro.setToChild(0); //the scene
-                            
-                            string sceneStr = macro.getName();
-                            
+                        string layerStr = scenes_child_xml.ToElement()->Attribute("layer");
+                        int layer = 0;
+                        if(!layerStr.compare("1"))
+                            layer = 1;
+                        else
+                            if(!layerStr.compare("2"))
+                                layer = 2;
+                        
+                        TiXmlHandle scene_core_xml = scenes_child_xml.FirstChild();
+                        
+                        string sceneStr = scenes_child_xml.Element()->ValueStr();
+                        {
                             if(!sceneStr.compare("feedback"))
                                 sceneCode = feedbackCode;
                             else
@@ -157,10 +176,6 @@ void eqkoscope::analyzeMacros(){
                                     }else
                                         if(!sceneStr.compare("cinema")){
                                             sceneCode = cinemaCode;
-                                            macro.setTo("cinema");
-                                            cinemaStr = macro.getValue("vidPath0");
-                                            videosToPreload.push_back(cinemaStr);
-                                            macro.setToParent();
                                         }else
                                             if(!sceneStr.compare("print"))
                                                 sceneCode = printCode;
@@ -171,32 +186,38 @@ void eqkoscope::analyzeMacros(){
                                                     if(!sceneStr.compare("draw"))
                                                         sceneCode = drawCode;
                         }
+                        
+                        scenes_child_xml = scenes_child_xml.Node()->NextSibling();
                     }
                 }
             }
             analysis[i] = sceneCode;
-            //            launchpadOut.sendNoteOn(1, i, analysis[i]);
-        }else{
-            //            launchpadOut.sendNoteOn(1, i, 0);
         }
     }
     
     paintMacros();
-    
-    cinema->preloadVideos(videosToPreload);
+//#endif
 }
 
 void eqkoscope::paintMacros(){
-    for(int i=0;i<128;i++){
-        if(analysis[i]){
-            launchpadOut.sendNoteOn(1, i, analysis[i+128*macroPage]);
+    for(int i=0;i<NB_MACRO_PER_PAGE;i++){
+        int pitch = i + NB_MACRO_PER_PAGE*macroPage;
+        if(analysis[pitch]){
+            launchpadOut.sendNoteOn(1, i, analysis[pitch]);
         }else{
             launchpadOut.sendNoteOn(1, i, 0);
         }
     }
     launchpadOut.sendControlChange(1, 104, macroPage>0 ? 60 : 0);
     launchpadOut.sendControlChange(1, 105, macroPage<MAX_MACRO_PAGES-1 ? 60 : 0);
-    
+}
+
+int eqkoscope::getMacroPitch(int macroNb){
+#ifdef MACRO_APC
+    return macroNb + NB_MACRO_PER_PAGE*macroPage;
+#else
+    return macroNb + NB_MACRO_PER_PAGE*macroPage;
+#endif
 }
 
 void eqkoscope::saveCurrentMacro(){
@@ -233,17 +254,18 @@ void eqkoscope::saveMacro(string path){
     //    str << "<parameterMapping path=\"" << controlFile << "\"/>" << endl;
     str << "<parameterMapping>" << endl;
     for(Auto* a : audioAutos)
-        str << a->toString() << endl;
+        str << a->toString() << ";" << endl;
     for(Auto* a : midiCCAutos)
         str << a->toString() << endl;
     for(Auto* a : midiNoteonAutos)
-        str << a->toString() << endl;
+        str << a->toString() << ";" << endl;
     for(Auto* a : leapAutos)
-        str << a->toString() << endl;
+        str << a->toString() << ";" << endl;
     for(Auto* a : oscAutos)
-        str << a->toString() << endl;
+        str << a->toString() << ";" << endl;
     for(Auto* a : timedAutos)
-        str << a->toString() << endl;
+        str << a->toString() << ";" << endl;
+    ofStringReplace(autoComments, "\n\n", "\n");
     str << autoComments << endl;
     str << "</parameterMapping>" << endl;
     
@@ -268,334 +290,229 @@ void eqkoscope::saveMacro(string path){
     file.close();
     
     analyzeMacros();
+    
+    if(recordAndRenderFlag==0){
+        processingStartDate = ofGetElapsedTimeMillis();
+    }
 }
 
 void eqkoscope::parseMacro(string path){
     cout << "PARSING MACRO " << path << endl;
     
+    try{
+    
     ofFile file(path);
     if(file.exists()){
         fbo.begin(); //reset fbos
         ofSetColor(0, 0, 0);
-        ofRect(0, 0, crt_WIDTH, crt_HEIGHT);
+        ofDrawRectangle(0, 0, crt_WIDTH, crt_HEIGHT);
         fbo.end();
         fbo2.begin();
         ofSetColor(0, 0, 0);
-        ofRect(0, 0, crt_WIDTH,crt_HEIGHT);
+        ofDrawRectangle(0, 0, crt_WIDTH,crt_HEIGHT);
         fbo2.end();
         
-        macroMorphing = 0;
-        if(strEndsWith(path, "transi.xml") ||
-           strEndsWith(path, "foudreColor.xml")||
-           strEndsWith(path, "uziMask.xml")){
-            macroMorphing = 10;
-        }
-        
-        if(
-//           strEndsWith(path, "volcaBase.xml")  ||
-           strEndsWith(path, "linesOmg.xml")
-//           strEndsWith(path, "RED.xml") || strEndsWith(path, "v3.xml")
-           ||strEndsWith(path, "yes.xml")
-           || strEndsWith(path, "ffff.xml")
-           || strEndsWith(path, "ciiircle.xml")
-           || strEndsWith(path, "trip.xml")|| strEndsWith(path, "waaaa.xml")){
-            macroMorphing = 10;
-        }
+        macroMorphing = parameterMap[macroFade];
         
         if(macroMorphing>0){
             for(int i=0;i<N_PARAM;i++)
                 macroMorphParameters[i] = deltaMap[i];
         }
-        
-        ofBuffer buffer = file.readToBuffer();
-        ofXml macro;
-        macro.loadFromBuffer(buffer.getText());
-        
-        
-        
-        bool v2 = ofStringTimesInString(buffer.getText(), "<scenes>");
-        bool v3 = !macro.getAttribute("version").compare("v3");
+
+        TiXmlDocument 	doc;
+        bool loadOkay = doc.LoadFile(file.getAbsolutePath());
+        TiXmlHandle macro = TiXmlHandle(&doc).ToNode()->FirstChild();
+
+        //        bool v3 = !macro.getAttribute("version").compare("v3");
         bool doNotLoadScenes = false;
         // check if the macro is a complete macro
         float oldBright = parameterMap[tintBrightness];
         
-        if(macro.exists("scenes")>0 || macro.exists("scene")>0){//full macro load
+        TiXmlHandle scenes_xml = macro.FirstChild("scenes");
+        TiXmlHandle scene_xml = macro.FirstChild("scene");
+        if(scenes_xml.ToNode() || scene_xml.ToNode()){//full macro load
             initParameters();
             currentMacroStr = path;
             macroComments = "";
-            if(macro.setTo("comments")){
-                macroComments = macro.getValue();
-                macro.setToParent();
+            TiXmlHandle comments_xml = macro.FirstChild("comments");
+            if(comments_xml.ToNode()){
+                auto c = comments_xml.ToElement()->GetText();
+                if(c != 0)
+                macroComments = c;
             }
         }else{//partial macro load (LED, etc)
             doNotLoadScenes = true;
         }
         
         string mappingStr;
-        if(macro.exists("parameterMapping") && macro.setTo("parameterMapping")){
-            controlFile = macro.getAttribute("path");
-            if(!controlFile.compare("")){
-                mappingStr = macro.getValue();
+        TiXmlHandle parameterMapping_xml = macro.FirstChild("parameterMapping");
+        if(parameterMapping_xml.ToNode()){
+            auto controlFileChar = parameterMapping_xml.ToElement()->Attribute("path");
+            if(controlFileChar != NULL){
+                controlFile = string(controlFileChar);
+            }else{
+                controlFile = "";
             }
-            macro.setToParent();
-        }else
-            controlFile = "";
+            if(parameterMapping_xml.ToElement()->GetText()) //debg assertion
+            mappingStr = parameterMapping_xml.ToElement()->GetText();
+        }
         
         if(controlFile.compare("")){
-            loadMapping(ofBufferFromFile("parameterMappings/"+controlFile).getText(), false, !doNotLoadScenes);
+            loadMappingFiles("parameterMappings/"+controlFile, false, !doNotLoadScenes);
         }else{
             loadMapping(mappingStr, false, !doNotLoadScenes);
         }
         
-        if(v2 || v3){
-            macro.setTo("FX");
-            
-            /** COMPATIBILITY **/
-            
-            if(v3){
-                string csvFXParams = macro.getValue();
-                vector<string> splitFX = ofSplitString(csvFXParams, "\n");
-                for(string line: splitFX){
-                    vector<string> ss = ofSplitString(line, ",");
-                    if(ss.size()==2){
-                        string name = ss[0];
-                        if(name.compare("tintBrightness") &&
-                           name.compare("draw_recording") && name.compare("draw_destroy")
-                           && name.compare("draw_destroyMode") && name.compare("tintBrightness") && name.compare("draw_currentDrawing")
-//                           && name.compare("ledBrightness")
-                           && name.compare("#comment")) //todo opt and put away from map
-                            deltaMap[parameterNameMap[name]] = ofToFloat(ss[1]);
-                    }
+        TiXmlHandle fx_xml = macro.FirstChild("FX");
+        if(!fx_xml.ToNode())
+           return;
+        
+        string csvFXParams = fx_xml.ToElement()->GetText();
+        vector<string> splitFX = ofSplitString(csvFXParams, "\n");
+        if(splitFX.size()==1)
+            splitFX = ofSplitString(csvFXParams, "\r");
+        if(splitFX.size()==1)
+            splitFX = ofSplitString(csvFXParams, " ");
+        for(string line: splitFX){
+            vector<string> ss = ofSplitString(line, ",");
+            if(ss.size()==2){
+                string name = ss[0];
+                if(name.compare("tintBrightness") &&
+                   name.compare("draw_recording") && name.compare("draw_destroy")
+                   && name.compare("draw_destroyMode") && name.compare("tintBrightness") && name.compare("draw_currentDrawing")
+                   && name.compare("oscIn")
+                   //                           && name.compare("ledBrightness")
+                   && name.compare("#comment")
+                   && name.compare("")
+                   && getParameterFromName(name)>=0){ //todo opt and put away from map
+                    int pid = getParameterFromName(name);
+                    float value =  ofToFloat(ss[1]);
+                    if(pid == ledTint && value > 1) //todo retirer en 2k19
+                        value /= 255.0;
+                       deltaMap[pid] = value;
                 }
-                macro.setToParent();
-                parameterMap[tintBrightness] = deltaMap[tintBrightness] = oldBright;
-            }else{
-                if(macro.getNumChildren()>0){
-                    macro.setToChild(0);
-                    do{
-                        string name = macro.getName();
-                        if(name.compare("draw_recording") && name.compare("draw_destroy")
-                           && name.compare("draw_destroyMode") && name.compare("tintBrightness") && name.compare("draw_currentDrawing") && name.compare("#comment")) //todo opt and put away from map
-                            
-                             deltaMap[parameterNameMap[macro.getName()]] = macro.getFloatValue();;
-                    }while(macro.setToSibling());
-                }
-                macro.loadFromBuffer(buffer.getText());
-            }
-        }else{
-            macro.setTo("FX");
-            
-            parameterMap[bpm] = macro.getFloatValue("bpm");
-            parameterMap[toLine] = macro.getFloatValue("toLine");
-            parameterMap[stripesAmp] = macro.getFloatValue("stripesAmp");
-            parameterMap[stripesSize] = macro.getFloatValue("stripesSize");
-            parameterMap[skewAmp] = macro.getFloatValue("skewAmp");
-            parameterMap[skewVAmp] = macro.getFloatValue("skewVAmp");
-            parameterMap[skewSpeed] = macro.getFloatValue("skewSpeed");
-            parameterMap[skewBorderCopy] = macro.getFloatValue("skewBorderCopy")==1;
-            parameterMap[displaceAmp] = macro.getFloatValue("displaceAmp");
-            parameterMap[displaceVAmp] = macro.getFloatValue("displaceVAmp");
-            parameterMap[displaceProba] = macro.getFloatValue("displaceProba");
-            parameterMap[chromaOffset] = macro.getFloatValue("chromaOffset");
-            parameterMap[chromaSepAngle] = macro.getFloatValue("chromasepAngle");
-            parameterMap[chromaSep] = macro.getFloatValue("chromaSep");
-            parameterMap[doubleChromaSep] =macro.getFloatValue("doubleChromaSep")==1;
-            deltaMap[chromaSep] = parameterMap[chromaSep];
-            parameterMap[chromaSens] = macro.getFloatValue("chromaSens")==1;
-            parameterMap[sortXThresh] = macro.getFloatValue("sortXThresh");
-            parameterMap[sortYThresh] = macro.getFloatValue("sortYThresh");
-            parameterMap[post_traitement] = macro.getFloatValue("post_traitement")==1;
-            parameterMap[nBlocks] = macro.getFloatValue("nBlocks");
-            parameterMap[nFreeze] = macro.getFloatValue("nFreeze");
-            parameterMap[kalei] = macro.getFloatValue("kalei");
-            parameterMap[kaleiNb] = macro.getFloatValue("kaleiNb");
-            parameterMap[kaleiOffX] = macro.getFloatValue("kaleiOffX");
-            parameterMap[kaleiOffY] = macro.getFloatValue("kaleiOffY");
-            parameterMap[randomTint] = macro.getFloatValue("randomTint")==1;
-            parameterMap[_gamma] = macro.getFloatValue("gamma");
-            parameterMap[_invert] = macro.getFloatValue("invert")==1;
-            parameterMap[vblur] = macro.getFloatValue("vblur");
-            parameterMap[hblur] = macro.getFloatValue("hblur");
-            deltaMap[vblur]  = parameterMap[vblur];
-            deltaMap[hblur]  = parameterMap[hblur];
-            parameterMap[sharpenMode] =(int)  macro.getFloatValue("sharpenMode");
-            parameterMap[sharpen] = macro.getFloatValue("sharpen");
-            parameterMap[blurOriginalMix] = macro.getFloatValue("blurOriginalMix");
-            texturing = macro.getFloatValue("texturing")==1;
-            cinemaBackground = macro.getFloatValue("cinemaBackground")==1;
-            cinemaTexture = macro.getFloatValue("cinemaTexture")==1;
-            parameterMap[randHHide] = macro.getFloatValue("randHHide");
-            parameterMap[randVHide] = macro.getFloatValue("randVHide");
-            parameterMap[glow] = macro.getFloatValue("glow")==1;
-            parameterMap[sobel] = macro.getFloatValue("sobel")==1;
-            parameterMap[omg3D] = macro.getFloatValue("omg3D");
-            parameterMap[omg3D2] = macro.getFloatValue("omg3D2");
-            parameterMap[omg3D2Rotation] = macro.getFloatValue("omg3D2Rotation");
-            deltaMap[omg3D2Rotation] = parameterMap[omg3D2Rotation];
-            parameterMap[omg3D2Dist] = macro.getFloatValue("omg3D2Dist");
-            deltaMap[omg3D2Dist] = parameterMap[omg3D2Dist];
-            parameterMap[divergence] = macro.getFloatValue("omg3D2Divergence");
-            deltaMap[divergence] = parameterMap[divergence];
-            parameterMap[omg3D2Symetry] =macro.getFloatValue("omg3D2Symetry")==1;
-            parameterMap[omg3D2FreeRotation] =macro.getFloatValue("omg3D2FreeRotation")==1;
-            parameterMap[omg3D2Speed] = macro.getFloatValue("omg3D2Speed");
-            parameterMap[xpixellate] = macro.getFloatValue("xpixellate");
-            parameterMap[ypixellate] = macro.getFloatValue("ypixellate");
-            deltaMap[xpixellate] = macro.getFloatValue("xpixellateDelta");
-            deltaMap[ypixellate] = macro.getFloatValue("ypixellateDelta");
-            parameterMap[paint] = macro.getFloatValue("paint");
-            deltaMap[contrast] = parameterMap[contrast] = 0;
-            
-            if(macro.getNumChildren("blendType")>0)
-                parameterMap[blendType] = macro.getFloatValue("blendType");
-            else
-                parameterMap[blendType] = MULTIPLY;
-            
-            parameterMap[centerTrium] = macro.getFloatValue("centerTrium");
-            parameterMap[currentScene] = macro.getFloatValue("currentScene");
-            
-            if(loadColorWithMacro){
-                parameterMap[chromaSepHue] = macro.getFloatValue("chromasepHue");
-                deltaMap[chromaSep] = macro.getFloatValue("chromaSepDelta");
-                if(macro.getNumChildren("tintSaturation")>0)
-                    parameterMap[tintSaturation] = macro.getFloatValue("tintSaturation");
-                else
-                    parameterMap[tintSaturation] = 1;
-                if(macro.getNumChildren("reTint")>0)
-                    parameterMap[_reTint] = macro.getFloatValue("reTint");
-                else
-                    parameterMap[_reTint] = false;
-                parameterMap[tintHue] = macro.getFloatValue("tintHue");
-                //            tintBrightness = macro.getFloatValue("tintBrightness");
-                //            dTintBrightness = macro.getFloatValue("dTintBrightness");
-                parameterMap[tintMode] = macro.getFloatValue("tintMode");
-                parameterMap[tintCenter] = macro.getFloatValue("tintCenter");
-                parameterMap[tintAmp] = macro.getFloatValue("tintAmp");
-                if(macro.getNumChildren("sidesSaturation")>0)
-                    parameterMap[sidesSaturation] = macro.getFloatValue("sidesSaturation");
-                else
-                    parameterMap[sidesSaturation] = 1;
-                
-                parameterMap[gradient] = macro.getFloatValue("gradient")==1;
             }
         }
+
+        parameterMap[tintBrightness] = deltaMap[tintBrightness] = oldBright;
         
-        if(macro.exists("featuredParameter") && macro.setTo("featuredParameter")){
-            featuredParameter = parameterNameMap[macro.getAttribute("id")];
-            macro.setToParent();
+        TiXmlHandle tmp_xml = macro.FirstChild("featuredParameter");
+        if(tmp_xml.ToNode()){
+            string id = tmp_xml.ToElement()->Attribute("id");
+            if(id.compare("-1") && getParameterFromName(id)>=0)
+            featuredParameter = getParameterFromName(id);
         }else
             featuredParameter = -1;
         
-        if(macro.exists("leapXParameter") && macro.setTo("leapXParameter")){
-            leapXParameter = parameterNameMap[macro.getAttribute("id")];
-            macro.setToParent();
+         tmp_xml = macro.FirstChild("leapXParameter");
+        if(tmp_xml.ToNode()){
+            string id = tmp_xml.ToElement()->Attribute("id");
+            if(id.compare("-1") && getParameterFromName(id)>=0)
+            leapXParameter = getParameterFromName(id);
         }else
             leapXParameter = -1;
-        
-        if(macro.exists("leapYParameter") && macro.setTo("leapYParameter")){
-            leapYParameter = parameterNameMap[macro.getAttribute("id")];
-            macro.setToParent();
+
+        tmp_xml = macro.FirstChild("leapYParameter");
+        if(tmp_xml.ToNode()){
+            string id = tmp_xml.ToElement()->Attribute("id");
+            if(id.compare("-1") && getParameterFromName(id)>=0)
+            leapYParameter = getParameterFromName(id);
         }else
             leapYParameter = -1;
-        if(macro.exists("leapZParameter") && macro.setTo("leapZParameter")){
-            leapZParameter = parameterNameMap[macro.getAttribute("id")];
-            macro.setToParent();
+         tmp_xml = macro.FirstChild("leapZParameter");
+        if(tmp_xml.ToNode()){
+            string id = tmp_xml.ToElement()->Attribute("id");
+            if(id.compare("-1") &&getParameterFromName(id)>=0)
+            leapZParameter = getParameterFromName(id);
         }else
             leapZParameter = -1;
-        if(macro.exists("leapDXParameter") && macro.setTo("leapDXParameter")){
-            leapDXParameter = parameterNameMap[macro.getAttribute("id")];
-            macro.setToParent();
+         tmp_xml = macro.FirstChild("leapDXParameter");
+        if(tmp_xml.ToNode()){
+            string id = tmp_xml.ToElement()->Attribute("id");
+            if(id.compare("-1") && getParameterFromName(id)>=0)
+            leapDXParameter = getParameterFromName(id);
         }else
             leapDXParameter = -1;
-        if(macro.exists("leapDYParameter") && macro.setTo("leapDYParameter")){
-            leapDYParameter = parameterNameMap[macro.getAttribute("id")];
-            macro.setToParent();
+         tmp_xml = macro.FirstChild("leapDYParameter");
+        if(tmp_xml.ToNode()){
+            string id = tmp_xml.ToElement()->Attribute("id");
+            if(id.compare("-1") && getParameterFromName(id)>=0)
+            leapDYParameter = getParameterFromName(id);
         }else
             leapDYParameter = -1;
-        if(macro.exists("leapDZParameter") && macro.setTo("leapDZParameter")){
-            leapDZParameter = parameterNameMap[macro.getAttribute("id")];
-            macro.setToParent();
+         tmp_xml = macro.FirstChild("leapDZParameter");
+        if(tmp_xml.ToNode()){
+            string id = tmp_xml.ToElement()->Attribute("id");
+            if(id.compare("-1") && getParameterFromName(id)>=0)
+            leapDZParameter = getParameterFromName(id);
         }else
             leapDZParameter = -1;
-        if(macro.exists("leapRollParameter") && macro.setTo("leapRollParameter")){
-            leapRollParameter = parameterNameMap[macro.getAttribute("id")];
-            macro.setToParent();
+         tmp_xml = macro.FirstChild("leapRollParameter");
+        if(tmp_xml.ToNode()){
+            string id = tmp_xml.ToElement()->Attribute("id");
+            if(id.compare("-1") && getParameterFromName(id)>=0)
+            leapRollParameter = getParameterFromName(id);
         }else
             leapRollParameter = -1;
         
         if(!doNotLoadScenes){
-            if(!v2){ //old solo scene loading
-                macro.setToParent();
+            if(scenes_xml.ToNode()){
                 
-                if(macro.exists("feedback"))
-                    loadSoloScene(feedbackScene);
-                if(macro.exists("fractal"))
-                    loadSoloScene(fractal);
-                if(macro.exists("agents"))
-                    loadSoloScene(agents);
-                if(macro.exists("pointback"))
-                    loadSoloScene(pointback);
-                if(macro.exists("shape"))
-                    loadSoloScene(shape);
-                if(macro.exists("uzi"))
-                    loadSoloScene(uzi);
-                if(macro.exists("cinema"))
-                    loadSoloScene(cinema);
-                if(macro.exists("print"))
-                    loadSoloScene(print);
-                if(macro.exists("lines"))
-                    loadSoloScene(lines);
-                
-                macro.setToChild(1);
-                scenes[0]->loadMacro(&macro);
-            }
-            else{
-                if(macro.exists("scenes")){
-                    macro.setTo("scenes");
-                    
-                    for(int i=0;i<3;i++){
-                        if(!macro.setToChild(i)){
-                            loadScene(0, i);
-                            continue;
-                        }
-                        
-                        string layerStr = macro.getAttribute("layer");
-                        int layer = 0;
-                        if(!layerStr.compare("1"))
-                            layer = 1;
-                        else
-                            if(!layerStr.compare("2"))
-                                layer = 2;
-                        
-                        macro.setToChild(0); //the scene
-                        
-                        string sceneStr = macro.getName();
-                        
-                        if(layer>0 && !sceneStr.compare("cinema")){
-                            loadScene(cinemas[0], layer);
-                        }else{
-                            if(layer>0 && !sceneStr.compare("uzi")){
-                                loadScene(uzis[0], layer);
-                            }else{
-                                Scene* theScene;
-                                for(int si=0;si<allScenes.size();si++)
-                                    if(!allScenes[si]->sceneID.compare(sceneStr)){
-                                        theScene = allScenes[si];
-                                        break;
-                                    }
-                                loadScene(theScene, layer);
-                            }
-                        }
-                        
-                        if(scenes[i]!=0)
-                            scenes[i]->loadMacro(&macro);
-                        macro.setToParent(); //<scene>
-                        macro.setToParent(); //<scenes>
+                TiXmlHandle scenes_child_xml = scenes_xml.FirstChild();
+
+                for(int i=0;i<3;i++){
+                    if(!scenes_child_xml.ToNode()){
+                        loadScene(0, i);
+                        continue;
                     }
+                    
+                    string layerStr = scenes_child_xml.ToElement()->Attribute("layer");
+                    int layer = 0;
+                    if(!layerStr.compare("1"))
+                        layer = 1;
+                    else
+                        if(!layerStr.compare("2"))
+                            layer = 2;
+                    
+                    TiXmlHandle scene_core_xml = scenes_child_xml.FirstChild(); //the scene
+                    
+                    string sceneStr = "";
+                    auto c  = scene_core_xml.ToElement()->Value() ;
+                    if(c!=0)
+                     sceneStr = c;
+                    
+                    if(layer>0 && !sceneStr.compare("cinema")){
+                        loadScene(cinemas[0], layer);
+                    }else{
+                        if(layer>0 && !sceneStr.compare("uzi")){
+                            loadScene(uzis[0], layer);
+                        }else{
+                            Scene* theScene = 0;
+                            for(int si=0;si<allScenes.size();si++)
+                                if(!allScenes[si]->sceneID.compare(sceneStr)){
+                                    theScene = allScenes[si];
+                                    break;
+                                }
+                            loadScene(theScene, layer);
+                        }
+                    }
+
+                    if(scenes[i] != 0)
+                        scenes[i]->loadMacro(&scene_core_xml);
+                
+                    scenes_child_xml = scenes_child_xml.ToElement()->NextSibling();
                 }
             }
         }
     }
+    
+    ///debug && compatibility
+    if( deltaMap[kalei] > 1 ) deltaMap[kalei] = 1;
+    
+#ifdef THE_CIRCLE
+    deltaMap[_mask] = 0;
+    deltaMap[borderMask] = 0.5;
+#endif
     
     if(macroMorphing>0){
         macroMorphEvo = 0;
@@ -605,10 +522,7 @@ void eqkoscope::parseMacro(string path){
         macroMorphParameters[_invert] = deltaMap[_invert];
         macroMorphParameters[vMirror] = deltaMap[vMirror];
         macroMorphParameters[hMirror] = deltaMap[hMirror];
-        macroMorphParameters[kalei] = deltaMap[kalei];
-        macroMorphParameters[kalei_2] = deltaMap[kalei_2];
-        
-        
+        macroMorphParameters[pertEvo] = deltaMap[pertEvo];
         
         if(macroMorphParameters[kaleiNb]<=1 || deltaMap[kaleiNb]<=1)
             macroMorphParameters[kaleiNb] = deltaMap[kaleiNb];
@@ -618,7 +532,7 @@ void eqkoscope::parseMacro(string path){
         if(macroMorphParameters[omg3D2]>0 && deltaMap[omg3D2]==0){
             deltaMap[omg3D2Rotation] = macroMorphParameters[omg3D2Rotation];
             deltaMap[omg3D2Dist] = macroMorphParameters[omg3D2Dist];
-            deltaMap[yDivergence] = macroMorphParameters[yDivergence];
+            deltaMap[divergenceY] = macroMorphParameters[divergenceY];
             deltaMap[divergence] = macroMorphParameters[divergence];
             deltaMap[omg3D2Alpha0] = macroMorphParameters[omg3D2Alpha0];
             deltaMap[omg3D2Nb] = macroMorphParameters[omg3D2Nb];
@@ -627,7 +541,7 @@ void eqkoscope::parseMacro(string path){
         if(macroMorphParameters[omg3D2]==0 && deltaMap[omg3D2]>0){
             macroMorphParameters[omg3D2Rotation] = deltaMap[omg3D2Rotation];
             macroMorphParameters[omg3D2Dist] = deltaMap[omg3D2Dist];
-            macroMorphParameters[yDivergence] = deltaMap[yDivergence];
+            macroMorphParameters[divergenceY] = deltaMap[divergenceY];
             macroMorphParameters[divergence] = deltaMap[divergence];
             macroMorphParameters[omg3D2Alpha0] = deltaMap[omg3D2Alpha0];
             macroMorphParameters[omg3D2Nb] = deltaMap[omg3D2Nb];
@@ -647,11 +561,36 @@ void eqkoscope::parseMacro(string path){
         }
         
         //media POs and rot
-
+        
     }else{
-    for(int i=0;i<N_PARAM;i++)
-        parameterMap[i] = deltaMap[i];
+        for(int i=0;i<N_PARAM;i++)
+            parameterMap[i] = deltaMap[i];
     }
+    
+    //BCF2000
+    for(int i=0;i<factorymidiCCAutos.size();i++){
+        if(factorymidiCCAutos[i]->channel == 1){
+        gerardpadOut.sendControlChange(1,
+                                       factorymidiCCAutos[i]->maxId,
+                                       127 * ( (parameterMap[factorymidiCCAutos[i]->parameterID]-factorymidiCCAutos[i]->values[0]) / (factorymidiCCAutos[i]->values[1] - factorymidiCCAutos[i]->values[0]) ) );
+        }
+    }
+
+    if(recordAndRenderFlag==1){
+        processingStartDate = ofGetElapsedTimeMillis();
+        processingStartFrame = ofGetFrameNum();
+        startSequenceSave();
+    }
+        
+    }catch(exception e){
+        cout << e.what() << endl;
+    }
+    
+#ifdef NEW_GUI
+    if(newGUI != NULL)
+     newGUI->updateAutos();
+#endif
+        
     
 }
 
@@ -673,11 +612,11 @@ void eqkoscope::reloadMacro(){
 }
 
 void eqkoscope::loadNextMacro(){
-    string p;
-    while(p.empty() && currentMacroCode<128*MAX_MACRO_PAGES){
+    string p("");
+    while(p.empty() && currentMacroCode < NB_MACRO_PER_PAGE*MAX_MACRO_PAGES){
         int c = currentMacroCode+1;
         if(c<0)
-            c = 128*MAX_MACRO_PAGES;
+            c = NB_MACRO_PER_PAGE * MAX_MACRO_PAGES;
         setMacroCode(c);
         p = getMacroFromMIDI(currentMacroCode);
     }
@@ -690,7 +629,7 @@ void eqkoscope::loadPrevMacro(){
     while(p.empty() && currentMacroCode>=0){
         int c = currentMacroCode-1;
         if(c<0)
-            c = 128*MAX_MACRO_PAGES;
+            c = NB_MACRO_PER_PAGE * MAX_MACRO_PAGES;
         setMacroCode(c);
         p = getMacroFromMIDI(currentMacroCode);
     }
@@ -704,7 +643,6 @@ string eqkoscope::getMacroFromMIDI(int pitch){
         if(macroMap[pitch].empty())
             return "";
         path << macroPath << macroMap[pitch] << ".xml";
-    }//else
-        //path << macroPath << "m" << pitch << ".xml";
+    }
     return path.str();
 }

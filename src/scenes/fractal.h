@@ -31,17 +31,17 @@ public:
     
     void draw(){
         ofSetColor(ofColor::black);
-        ofRect(0,0,WIDTH,HEIGHT2);
+        ofDrawRectangle(0,0,WIDTH,HEIGHT2);
         ofSetColor(ofColor::white);
         
         fractalShader.load("../shaders/fractals");
         
         fractalShader.begin();
-        fractalShader.setUniform1f("param1", app->parameterMap[fractalP1]);
-        fractalShader.setUniform1f("param2", app->parameterMap[fractalP2]);
-        fractalShader.setUniform1f("scale", app->parameterMap[fractalScale]);
-        fractalShader.setUniform1f("mode", (int)app->parameterMap[fractalMode]);
-        fractalShader.setUniform1i("iter", (int)app->parameterMap[fractalIterations]);
+//        fractalShader.setUniform1f("param1", app->parameterMap[fractalP1]);
+//        fractalShader.setUniform1f("param2", app->parameterMap[fractalP2]);
+//        fractalShader.setUniform1f("scale", app->parameterMap[fractalScale]);
+        fractalShader.setUniform1f("mode", 0);
+//        fractalShader.setUniform1i("iter", (int)app->parameterMap[fractalIterations]);
         fbo.draw(0,0);
         fractalShader.end();
     }
@@ -95,7 +95,7 @@ public:
         (*xml) << "</fractal>" << endl;
     }
     
-    void loadMacro(ofXml *xml){
+    void loadMacro(TiXmlHandle *xml){
     }
     
     std::string getInfo(){

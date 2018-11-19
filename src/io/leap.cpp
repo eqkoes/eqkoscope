@@ -8,7 +8,9 @@ void eqkoscope::updateLeap(){
     fingersFound.clear();
     long s = ofGetElapsedTimeMicros();
     if(parameterMap[leapAutoReco] && !leap.isConnected()){
+        #ifdef VERBOSE
         cout << "reco leap" << endl;
+#endif
         leap.open();
     }
     if(leap.isFrameNew()){

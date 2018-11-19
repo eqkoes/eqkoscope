@@ -12,6 +12,7 @@
 #include <ofBaseTypes.h>
 #include <string>
 #include "AbstractApp.h"
+#include "../libs/tinyxml.h"
 
 class Scene{
     
@@ -37,7 +38,7 @@ public:
     virtual void oscEvent(std::string header, std::vector<float> args)=0;
     
     virtual void saveMacro(stringstream *xml)=0;
-    virtual void loadMacro(ofXml *xml)=0;
+    virtual void loadMacro(TiXmlHandle *xml)=0;
     
     virtual std::string getInfo()=0;
     
@@ -47,6 +48,7 @@ public:
     bool back=true;
     
     std::string sceneID = "";
+    
     
 //    std::map<std::string, float> parameterMap;
 //    std::map<std::string, float> deltaMap;

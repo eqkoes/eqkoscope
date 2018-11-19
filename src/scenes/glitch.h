@@ -64,9 +64,9 @@ public:
             setRandomColor();
             
             if (x<WIDTH/2)
-                ofRect(x, y-h/2, WIDTH, h);
+                ofDrawRectangle(x, y-h/2, WIDTH, h);
             else
-                ofRect(0, y-h/2, x, h);
+                ofDrawRectangle(0, y-h/2, x, h);
         }
     }
     
@@ -81,7 +81,7 @@ public:
             y = 0;
             setRandomColor();
 
-                ofRect(x-w/2, y, w, h);
+                ofDrawRectangle(x-w/2, y, w, h);
         }
     }
     
@@ -96,7 +96,7 @@ public:
             y = int(ofRandom(HEIGHT2));;
             setRandomColor();
             
-            ofRect(x-w/2, y-h/2, w, h);
+            ofDrawRectangle(x-w/2, y-h/2, w, h);
         }
     }
     
@@ -144,6 +144,7 @@ public:
     }
     
     ofImage* getImage(){
+        return NULL;
     }
     
     void setImage(ofImage*){
@@ -170,7 +171,7 @@ public:
     }
     
     
-    void loadMacro(ofXml *xml){
+    void loadMacro(TiXmlHandle *xml){
         
     }
     

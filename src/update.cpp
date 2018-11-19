@@ -4,9 +4,67 @@
 
 float skew_lastDate = 0;
 
+int lastChangedParameters[N_PARAM];
+int nextTimeStamp = 0;
+vector<string> logFileData;
+int logFileDataIndex = -1;
+void eqkoscope::checkForParametersChange(){
+   
+    if(recordAndRenderFlag==0){
+        std::vector<int> changedParameters;
+
+        for(int p=0;p<N_PARAM;p++){
+            if(abs(lastChangedParameters[p] - parameterMap[p]) > BOOL_PARAM_EPSILON){
+                changedParameters.push_back(p);
+                lastChangedParameters[p] = parameterMap[p];
+            }
+        }
+        
+        if(changedParameters.size()>0){
+            logfile << "t," << ofGetElapsedTimeMillis() - processingStartDate << endl;
+            for(int p=0;p<changedParameters.size();p++){
+                logfile << changedParameters[p] << "," <<  parameterMap[changedParameters[p]] << endl;
+            }
+        }
+    }
+    
+    if(recordAndRenderFlag==1){
+        cout << "next time stamp " << nextTimeStamp << endl;
+        if(logFileData.size()==0){ //init bourrin
+            string data;
+            ofBuffer buf = logfile.readToBuffer();
+            logFileData = ofSplitString(buf.getText(), "\n");
+        }
+        u_long t = (ofGetFrameNum()-processingStartFrame) * 1000/maxFrameRate;
+        if(nextTimeStamp <= t){ //load
+            string line;
+            line = logFileData[++logFileDataIndex];
+            while(line.substr(0,2).compare("t,")!=0 && logFileDataIndex < logFileData.size()-1){
+                int p = ofToInt(ofSplitString(line, ",")[0]);
+                float v = ofToFloat(ofSplitString(line, ",")[1]);
+                deltaMap[p] = parameterMap[p] = v;
+                line = logFileData[++logFileDataIndex];
+            }
+            
+            if(line.substr(0,2).compare("t,")==0){
+                nextTimeStamp =  ofToInt(ofSplitString(line, ",")[1]);
+            }
+        }
+        if(t - nextTimeStamp > 2000){
+            exit();
+        }
+    }
+    
+}
+
 void eqkoscope::loadConfig(){
-    string t = ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory()+"/../../../config.csv").getText();
+#ifdef OF_10
+    string t = ofBufferFromFile("../config.csv").getText();
+#else
+    string t = ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory() + ("/../../../config.csv")).getText();
+#endif
     if(t.compare("")){
+        ofStringReplace(t, "\r", "\n");
         vector<string> lines = ofSplitString(t, "\n");
         for(int x=0;x<lines.size();x++){
             vector<string > fields = ofSplitString(lines[x], ",");
@@ -17,14 +75,24 @@ void eqkoscope::loadConfig(){
             if(!param.compare("live_mode"))
                 liveMode = ofToInt(value);
             else
-                if(!param.compare("dualDisplay"))
+                if(!param.compare("dual_display"))
                     dualDisplay = ofToInt(value);
                 else
-                    if(!param.compare("width") && value.compare("native")){
+                    if(!param.compare("resolution") && value.compare("native")){
+                        vector<string> values = ofSplitString(value, "x");
+                        if(values.size()>=2){
+                        render_WIDTH = ofToInt(values[0]);
+                        render_HEIGHT = ofToInt(values[1]);
+                        crt_WIDTH =  render_WIDTH;
+                        crt_HEIGHT =  render_HEIGHT;
+                        FINALWIDTH =  render_WIDTH;
+                                FINALHEIGHT =  crt_HEIGHT;
+                    }
+                    }else if(!param.compare("width") && value.compare("native")){
                         FINALWIDTH = ofToInt(value);
                     }else if(!param.compare("height") && value.compare("native")){
                         FINALHEIGHT = ofToInt(value);
-                    }else if(!param.compare("multiProjector")){
+                    }else if(!param.compare("multi_projector")){
                         MULTIPROJECTOR = ofToInt(value);
                     }else if(!param.compare("gif_width") && value.compare("native")){
                         GIF_WIDTH = ofToInt(value);
@@ -33,18 +101,30 @@ void eqkoscope::loadConfig(){
                     }else if(!param.compare("macro_path"))
                         macroPath = (value);
                     else if(!param.compare("fp"))
-                        featuredParameter = (parameterNameMap[value]);
+                        featuredParameter = getParameterFromName(value);
                     else if(!param.compare("MIDIMap"))
                         MIDIMapPath = (value);
-                    else if(!param.compare("enforce_io2"))
-                        enforce_io2 = !value.compare("1");
-                    else if(!param.compare("enforce_launchpad"))
-                        enforce_launchpad = !value.compare("1");
-                    else if(!param.compare("enforce_novation"))
-                        enforce_novation = !value.compare("1");
-                    else if(!param.compare("enforce_nano"))
-                        enforce_nano = !value.compare("1");
+                    else if(!param.compare("enforce_MIDI")){
+                        for(int f=1;f<fields.size();f++)
+                        MIDI_device_connected[fields[f]] = 0;
+                    }
         }
+    }
+}
+
+void eqkoscope::loadMappingFiles(std::string paths, bool factory, bool erase)
+{
+    vector<string> splittedPaths = ofSplitString(paths, ":");
+    
+    for(int p = 0;p<splittedPaths.size();p++){
+        string path = splittedPaths[p];
+#ifdef OF_10
+        string str = ofBufferFromFile("../"+path).getText();
+#else
+        string str = ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory() +  "/../../../" + path).getText();
+
+#endif
+        loadMapping(str, factory, erase && p==0);
     }
 }
 
@@ -57,7 +137,23 @@ void eqkoscope::loadMapping(std::string str, bool factory, bool erase){
     autoComments = "";
     string t = str;
     if(t.compare("")){
+//        ofStringReplace(t, " ", "\n");
+        ofStringReplace(t, "; ", ";"); //debug...
+        ofStringReplace(t, "\r", ""); //debug...
         vector<string> lines = ofSplitString(t, "\n");
+//        vector<string> lines = ofSplitString(t, "\n");
+//        if(lines.size()<2) // FOR WINDOWS
+//            lines = ofSplitString(t, "\r");
+//        if(lines.size()<2){ // FOR WTF
+//            string str = "";
+//            const char space = 32;
+//            str.append(&space);
+//            lines = ofSplitString(t, str);
+//        }
+        if(lines.size()<2){ // FOR WTF
+            ofStringReplace(t, "\n", ""); //debug...
+            lines = ofSplitString(t, ";");
+        }
         for(int x=0;x<lines.size();x++){
             if(lines[x].compare("") && lines[x].compare(0, 2, "//")
                && lines[x].compare(0, 2, "<!")){
@@ -68,7 +164,6 @@ void eqkoscope::loadMapping(std::string str, bool factory, bool erase){
             }
         }
     }
-    
 }
 
 void eqkoscope::loadShaders(){
@@ -89,6 +184,7 @@ void eqkoscope::loadShaders(){
 //    psyShiftShader.load("../shaders/psyShift");
     chromaPointShader.load("../shaders/chromaPoint");
     bwShader.load("../shaders/b&w");
+    illuShader.load("../shaders/illu");
     
     loadFXShaders();
 }
@@ -130,7 +226,7 @@ void eqkoscope::eraseControlMapping(bool factory){
             }
         }
         factorymidiCCAutos.clear();
-        for(int i=0;i<16;i++)
+        for(int i=0;i<17;i++)
             for(int j=0;j<127;j++){
                 ccAutoFastMap[i][j].clear();
                 noteAutoFastMap[i][j].clear();
@@ -138,17 +234,43 @@ void eqkoscope::eraseControlMapping(bool factory){
     }
 }
 
-void eqkoscope::addCommand(string commandString, bool factory){
+void eqkoscope::automationsSanityCheck(){
+    automationsSanityCheck(&leapAutos);
+    automationsSanityCheck(&audioAutos);
+    automationsSanityCheck(&oscAutos);
+    automationsSanityCheck(&midiNoteonAutos);
+    automationsSanityCheck(&midiCCAutos);
+    automationsSanityCheck(&timedAutos);
+}
+
+void eqkoscope::automationsSanityCheck(vector<Auto*>* autos){
+    int index = 0;
+    for(int index = 0; index < autos->size() ; index++){
+        int pid = (*autos)[index]->parameterID;
+        for(int i = index + 1; i < autos->size();i++){
+            if((*autos)[i]->parameterID == pid){
+                autos->erase(autos->begin() + index);
+                index --;
+            }
+        }
+    }
+}
+
+Auto* eqkoscope::createCommand(string commandString){
     vector<string> args = ofSplitString(commandString, " ");
     vector<string> fields = ofSplitString(args[0], ",");
     
+    
     if(fields.size()<2 || args.size()<1)
-        return;
+        return NULL;
     
     string triggerTypeStr = fields[0];
-    int pid = parameterNameMap[fields[1]];
+    if(getParameterFromName(fields[1]) == -1)
+        return NULL;
+    int pid = getParameterFromName(fields[1]);
     Auto* a = new Auto(this, pid);
     
+
     
     if(args.size()>=2){
         a->args = args[1];
@@ -163,8 +285,12 @@ void eqkoscope::addCommand(string commandString, bool factory){
             a->invert = true;
         if(args[1].find("bin")!=string::npos)
             a->bin = true;
+        if(args[1].find("int")!=string::npos)
+            a->is_int = true;
         if(args[1].find("transcient")!=string::npos)
             a->transcient = true;
+        if(args[1].find("saw")!=string::npos)
+            a->saw = true;
     }
     
     if(!triggerTypeStr.compare("AUDIO")){
@@ -173,13 +299,13 @@ void eqkoscope::addCommand(string commandString, bool factory){
             a->channel = ofToInt(fields[4]);
             vector<string> v = ofSplitString(fields[2], "/");
             a->smoothing = ofToFloat(fields[3]);
+            parameterEasingMap[pid] = a->smoothing;
             if(v.size()>=1){
                 for(int vIndex=0;vIndex<v.size();vIndex++)
                     a->addValue(ofToFloat(v[vIndex]));
-                audioAutos.push_back(a);
+                return a;
             }
         }
-        return;
     }
     if(!triggerTypeStr.compare("OSC")){
         if(fields.size()==5){
@@ -191,10 +317,9 @@ void eqkoscope::addCommand(string commandString, bool factory){
             if(v.size()>=1){
                 for(int vIndex=0;vIndex<v.size();vIndex++)
                     a->addValue(ofToFloat(v[vIndex]));
-                oscAutos.push_back(a);
+                return a;
             }
         }
-        return;
     }
     if(!triggerTypeStr.compare("NOTEON")){
         if(fields.size()==6){
@@ -212,18 +337,14 @@ void eqkoscope::addCommand(string commandString, bool factory){
             if(v.size()>=1){
                 for(int vIndex=0;vIndex<v.size();vIndex++)
                     a->addValue(ofToFloat(v[vIndex]));
-                if(factory){
-                    factorymidiNoteonAutos.push_back(a);
-                    for(int id=a->minId;id<=a->maxId;id++)
-                        noteAutoFastMap[a->channel-1][id-1].push_back(factorymidiNoteonAutos[factorymidiNoteonAutos.size()-1]);
-                }else
-                    midiNoteonAutos.push_back(a);
+                return a;
             }
         }
-        return;
     }
     if(!triggerTypeStr.compare("CC")){
         if(fields.size()==6){
+
+            
             a->type = MIDICC;
             a->channel = ofToInt(fields[4]);
             a->minId = a->maxId = ofToInt(fields[5]);
@@ -233,14 +354,9 @@ void eqkoscope::addCommand(string commandString, bool factory){
             if(v.size()>=1){
                 for(int vIndex=0;vIndex<v.size();vIndex++)
                     a->addValue(ofToFloat(v[vIndex]));
-                if(factory){
-                    factorymidiCCAutos.push_back(a);
-                    ccAutoFastMap[a->channel-1][a->minId-1].push_back(factorymidiCCAutos[factorymidiCCAutos.size()-1]);
-                }else
-                    midiCCAutos.push_back(a);
+                return a;
             }
         }
-        return;
     }
     if(!triggerTypeStr.compare("LEAP")){
         if(fields.size()>=5){
@@ -261,10 +377,9 @@ void eqkoscope::addCommand(string commandString, bool factory){
                         a->inputMaxValue = ofToFloat(v2[0]);
                     }
                 }
-                leapAutos.push_back(a);
+                return a;
             }
         }
-        return;
     }
     if(!triggerTypeStr.compare("DUR")){
         if(fields.size()==4){
@@ -275,10 +390,10 @@ void eqkoscope::addCommand(string commandString, bool factory){
             if(v.size()>=1){
                 for(int vIndex=0;vIndex<v.size();vIndex++)
                     a->addValue(ofToFloat(v[vIndex]));
-                timedAutos.push_back(a);
+                
+                return a;
             }
         }
-        return;
     }
     if(!triggerTypeStr.compare("BPM")){
         if(fields.size()==4){
@@ -288,57 +403,94 @@ void eqkoscope::addCommand(string commandString, bool factory){
             if(v.size()>=1){
                 for(int vIndex=0;vIndex<v.size();vIndex++)
                     a->addValue(ofToFloat(v[vIndex]));
-                timedAutos.push_back(a);
+                return a;
             }
         }
+    }
+    
+    return NULL;
+}
+
+
+void eqkoscope::addCommand(string commandString, bool factory){
+    Auto* a = createCommand(commandString);
+    
+    if(a==NULL)
+        return;
+    
+    vector<string> args = ofSplitString(commandString, " ");
+    vector<string> fields = ofSplitString(args[0], ",");
+    
+    if(fields.size()<2)
+        return;
+    
+    string triggerTypeStr = fields[0];
+    
+    if(!triggerTypeStr.compare("AUDIO")){
+                audioAutos.push_back(a);
+                automationsSanityCheck(&audioAutos);
+        return;
+    }
+    if(!triggerTypeStr.compare("OSC")){
+                       oscAutos.push_back(a);
+                automationsSanityCheck(&oscAutos);
+        return;
+    }
+    if(!triggerTypeStr.compare("NOTEON")){
+        
+                if(factory){
+                    factorymidiNoteonAutos.push_back(a);
+                    for(int id=a->minId;id<=a->maxId;id++)
+                        noteAutoFastMap[a->channel][id-1].push_back(factorymidiNoteonAutos[factorymidiNoteonAutos.size()-1]);
+                }else{
+                    midiNoteonAutos.push_back(a);
+                automationsSanityCheck(&midiNoteonAutos);
+                }
+        return;
+    }
+    if(!triggerTypeStr.compare("CC")){
+                        if(factory){
+                    factorymidiCCAutos.push_back(a);
+                    ccAutoFastMap[a->channel][a->minId-1].push_back(factorymidiCCAutos[factorymidiCCAutos.size()-1]);
+                }else{
+                    midiCCAutos.push_back(a);
+                    automationsSanityCheck(&midiCCAutos);
+                }
+        return;
+    }
+    if(!triggerTypeStr.compare("LEAP")){
+        
+                leapAutos.push_back(a);
+                automationsSanityCheck(&leapAutos);
+        return;
+    }
+    if(!triggerTypeStr.compare("DUR")){
+                       timedAutos.push_back(a);
+                automationsSanityCheck(&timedAutos);
+        return;
+    }
+    if(!triggerTypeStr.compare("BPM")){
+                      timedAutos.push_back(a);
+                automationsSanityCheck(&timedAutos);
         return;
     }
 }
 
 void eqkoscope::update(){
-    
-#ifdef ATELIERS
-//    if(ofGetFrameNum()>10)
-//        app->deltaMap[tintBrightness] = ofMap(ofGetMouseX(), 0, WIDTH, 0, 1);
-#endif
-    
-#ifndef MASTER //receive orders via TCP
-    int size = sizeof(ofxMidiMessage);
-    for(int i = 0; i<tcpServer.getLastID(); i++){ // getLastID is UID of all clients
-        if( tcpServer.isClientConnected(i) ){
-            int r;
-            while((r = tcpServer.receiveRawMsg(i, (char*)&tcpMIDIMsg, size))){
-                if(r==size){
-                    cout << "received midi " << tcpMIDIMsg.control << endl;
-                    //newMidiMessage(tcpMIDIMsg);
-                }
-            }
-        }
-    }
-#endif
-    
-#ifndef SLAVE
-    return;
-#endif
-    
-#ifdef INSTALL_THOUGHTS
-    thougts->update();
-#endif
-    
+
 #ifdef OFFLINE_RENDER
     updateOfflineMIDI();
 #endif
     
-#ifdef LAZERS
-    //    if(ofGetFrameNum()%50==49)
-    //    laser.update();
-    //    laser.addLaserCircle(ofPoint(800,00), 500, ofColor::green);
-#endif
     
 #ifdef BRASERO
+    {
     //    if(kinectDevice.isFrameNew()){
     //        kinectDevice.draw(0, 0);
     kinectDevice.update();
+    
+   
+
     
     if(ofGetFrameNum()==5){ //initialisation
         scenes[0] = feedbackScene;
@@ -441,11 +593,37 @@ void eqkoscope::update(){
     deltaMap[sobel] = 1 * (1 - parameterMap[user4]);
     deltaMap[upRot] = 0.05 + 1 * (1 - parameterMap[user4]);
     deltaMap[movieSpeed] = 1 + 4 * (1 - parameterMap[user4])>0.5 ? 1 : 0;
+    }
 #endif
     
-    if(parameterMap[MIDIMappingAutoLoad]>BOOL_PARAM_EPSILON && ofGetFrameNum()%60==0){
-        loadMapping(ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory()+"/../../../"+MIDIMapPath).getText(), true, true);
+    
+    ///frame rate control
+    if(currentFrameRate < ofGetFrameRate () + 1
+       ||
+       currentFrameRate != min(maxFrameRate,parameterMap[frameRate])){
+        currentFrameRate = min(maxFrameRate,parameterMap[frameRate]);
+        ofSetFrameRate(currentFrameRate);
     }
+    
+    
+    //OFFLINE RECORD && RENDER
+//    if(ofGetFrameNum()==5){ ///INITIALISATION
+//    if(recordAndRenderFlag==0){
+//        saveMacro("./record.xml");
+//    }else{
+//        if(recordAndRenderFlag==1){
+//            loadMacro("./record.xml");
+//        }
+//    }
+//    }
+//    
+    if(processingStartDate>0)
+        checkForParametersChange();
+    
+    
+//    if(parameterMap[MIDIMappingAutoLoad]>BOOL_PARAM_EPSILON && ofGetFrameNum()%60==0){
+//        loadMapping(MIDIMapPath, true, true);
+//    }
     
     if(!kinectRunning && parameterMap[kinect]){ //start the kinect server
         cout << ofSystem("open ../../../FeedbackUtils.app") << endl;
@@ -454,20 +632,38 @@ void eqkoscope::update(){
     
     if(pause)
         return;
+
     
     float date = ofGetElapsedTimeMicros();
     
-    if(debugMapping){
-        if(controlFile.compare(""))
-            loadMapping(ofBufferFromFile("parameterMappings/"+controlFile).getText(), false, true);
+    /** EVENTS **/
+    
+    if(parameterMap[randomJump]>0){
+        float z = parameterMap[mediaZ];
+        parameterEasingMap[mediaX] = parameterMap[speed];
+        parameterEasingMap[mediaY] = parameterMap[speed];
+        deltaMap[mediaX] = ofRandom(-z,z);
+        deltaMap[mediaY] = ofRandom(-z,z);
+        parameterMap[randomJump] = deltaMap[randomJump] = 0;
+    }
+    
+
+    
+    if(deltaMap[macro]>0){
+        niceRandom(deltaMap[macro] - 1);
+        deltaMap[macro] = parameterMap[macro] = 0;
     }
     
     updateMidi();
     updateMacros();
-    updateSerial();
-    
-    
+    updateSerial();    
+//    guiCanvas->update();
+
+
     doStressTest();
+    
+    for(int sp : surpriseParameters)
+        deltaMap[sp] = parameterMap[sp] = scaleGUIValue(sp, parameterMap[surprise]);
     
     /** MACROS UPDATES **/
     macroMutex.lock();
@@ -486,6 +682,10 @@ void eqkoscope::update(){
     /** SCENE UPDATES **/
     if(parameterMap[embedCinema])
         cinema->update();
+    
+    if(parameterMap[background]==1 && cinemas.size()>1 && cinemas[1]!=NULL){
+        cinemas[1]->update();
+    }
     
     for(int i=0;i<scenes.size();i++){ //genericit√©
         if(scenes[i]==cinema){
@@ -511,11 +711,11 @@ void eqkoscope::update(){
             lines->update();
             break;
         }
-    for(int i=0;i<scenes.size();i++)
-        if(scenes[i]==three){
-            three->update();
-            break;
-        }
+//    for(int i=0;i<scenes.size();i++)
+//        if(scenes[i]==three){
+//            three->update();
+//            break;
+//        }
     for(int i=0;i<scenes.size();i++)
         if(scenes[i]==feedbackScene){
             feedbackScene->update();
@@ -551,14 +751,11 @@ void eqkoscope::update(){
         for(int i=0;i<N_PARAM;i++)
             parameterMap[i] = macroMorphEvo*deltaMap[i] + (1-macroMorphEvo)*macroMorphParameters[i];
     }else{
-        
         for(int i=0;i<N_PARAM;i++){
-            //        if(i!=ledEvent){
             float v = parameterMap[i] + parameterEasingMap[i]*(deltaMap[i]-parameterMap[i]);
             if(abs(v)<0.000001)
                 v = 0;
             parameterMap[i] = v;
-            //        }
         }
     }
     
@@ -577,24 +774,30 @@ void eqkoscope::update(){
     }
     autoMicros += microsEasing*(ofGetElapsedTimeMicros() - autoDate - autoMicros);
     
-    
-    if(cinemaBackground || cinemaTexture)
-        cinema->update();
-    
     if(parameterMap[randomTint]>0){
         feedbackScene->updateRandomColor();
         utils->setTintHue((parameterMap[tintHue] + ofRandom(-parameterMap[tintAmp], parameterMap[tintAmp])/2.0));
     }
     
-    /** OSC **/
+      /** OSC **/
     manageOSC();
     
     
     /** LEAP **/
     updateLeap();
     
-    
     updateMicros += microsEasing*(ofGetElapsedTimeMicros() - date - updateMicros);
+}
+
+void eqkoscope::updateGUI(){
+//    paramPanel->clear();
+    
+    for(int i = 0;i<parametersInGUI.size();i++){
+        int id = parametersInGUI[i];
+//        sliders[i]->setup(parameterIDMap[id], deltaMap[id], parametersInGUIBounds[i][0], parametersInGUIBounds[i][1]);
+//        paramPanel->add((sliders[i]));
+        
+    }
 }
 
 void eqkoscope::doStressTest(){

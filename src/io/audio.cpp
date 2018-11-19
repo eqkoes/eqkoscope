@@ -12,17 +12,33 @@ ofSoundStream mySoundStream;
 
 
 void eqkoscope::initAudio(){
-//    ofSoundStreamSetup(1, 1, this, 44100, AUDIO_BUFFER_SIZE, 4);
-//    ofSoundStreamSetup(1, 2, this, 44100, AUDIO_BUFFER_SIZE, 4);
     
-    mySoundStream.listDevices();
-//
-//    mySoundStream.setDeviceID(5); //soundflower 2ch
+#ifdef VERBOSE
+//    mySoundStream.listDevices();
+#endif
+
+#ifdef OF_10
+    std::vector<ofSoundDevice> dvs =  mySoundStream.getDeviceList();
+    int deviceIndex = 0;
+    for(int d=0;d<dvs.size();d++){
+        if(!dvs[d].name.compare("ASIO4ALL v2")){
+            deviceIndex = d;
+    break;
+        }
+    }
     
-    mySoundStream.setup(2, 0, 44100, AUDIO_BUFFER_SIZE, 1);
-//    mySoundStream.setDeviceID(0);
+    mySoundStream.setDeviceID(deviceIndex);
+#else
+    mySoundStream.setDeviceID(0);
+
+#endif
+
+    mySoundStream.setup(0, 0, 44100, AUDIO_BUFFER_SIZE, 1);
+//    mySoundStream.setup(0, 4, 44100, AUDIO_BUFFER_SIZE, 1);
+
     mySoundStream.setOutput(this);
-//
+    mySoundStream.setInput(this);
+
     
     for(int i=0;i<AUDIO_BUFFER_SIZE;i++)
         prev_audio[i] = -100;
@@ -30,12 +46,18 @@ void eqkoscope::initAudio(){
 
 void eqkoscope::audioRequested(float * output, int bufferSize, int nChannels){
     if(!parameterMap[audio]){
-        if(savingGif){
+        #ifdef VIDEO_EXPORT
+        if(savingGif && vidRecorder.isRecording()){
             vidRecorder.addAudioSamples(output, AUDIO_BUFFER_SIZE, 2); //we need to add dummy samples
         }
+#endif
         return;
     }
-    if(nbFramesSinceAudioStart<10){
+
+    if(    mySoundStream.getNumOutputChannels()==0 )
+        mySoundStream.setup(2, 0, 44100, AUDIO_BUFFER_SIZE, 1);
+
+    if(nbFramesSinceAudioStart<10){ //debug hack
         nbFramesSinceAudioStart++;
         return;
     }
@@ -44,7 +66,7 @@ void eqkoscope::audioRequested(float * output, int bufferSize, int nChannels){
     ofImage* img = &audioImg;
     float gain = parameterMap[audio];
 
-    if(parameterMap[test]==0){
+    if(1==0){
         float freq = 1;
         float smooth = 1;
         float b = bufferSize*smooth;
@@ -77,9 +99,10 @@ void eqkoscope::audioRequested(float * output, int bufferSize, int nChannels){
                 output [i* nChannels] = s * gain;
         }
     }
-    
-    if(savingGif)
+    #ifdef VIDEO_EXPORT
+    if(savingGif && vidRecorder.isRecording())
         vidRecorder.addAudioSamples(output, bufferSize, nChannels);
+#endif
 }
 
 void eqkoscope::audioReceived(float *input, int bufferSize, int nChannels){
@@ -87,16 +110,12 @@ void eqkoscope::audioReceived(float *input, int bufferSize, int nChannels){
     
     int res = 4; //decimation
     float gain = pow(10, (parameterMap[audioGain])/20.0);
-    //tetttet   ette et t
-//    cout << "rms ";
     for(int i=0;i<nChannels;i++){
         currentRms[i] = 0;
         for(int y = 0;y<bufferSize;y+=res)
             currentRms[i] += input[y+i]*input[y+i];
         currentRms[i] = sqrt(currentRms[i]/(bufferSize/(res)))*gain;
-//        cout << " " << currentRms[i];
     }
-//    cout << endl;
 }
 
 void eqkoscope::analyzeAudio(){

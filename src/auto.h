@@ -11,7 +11,7 @@
  USE CASES:
  
  MIDI ON/OFF : sets the parameter on ON, resets on off (negative value)
- 
+ dur
  AUDIO: maps audio signal on effect (with smoothing)
  
  OSC : maps controller on effect (with smoothing)
@@ -33,12 +33,18 @@ class Auto{
 public:
     Auto(AbstractApp* app, int pid){
         this->app = app;
-        this->parameterName = pid;
+        this->parameterID = pid;
     }
     
     void update(float value){
         
-        if(parameterName == ledEvent ){
+        if(saw && value > 0){
+            app->parameterEasingMap[parameterID] = 1;
+        }else{
+         app->parameterEasingMap[parameterID] = smoothing; //DAT HACK !!
+        }
+            
+        if(parameterID == ledEvent ){
             app->deltaMap[ledEvent]++;
             app->parameterMap[ledEvent]++;
             return;
@@ -52,13 +58,23 @@ public:
         bool timedRandom = false;
         switch(type){
             case TIMED: case BPM:{
+                float date = app->localFrameNum*1000/app->currentFrameRate;
+
                 if(ulastDate!=-1){
-                    uelapsed += (ofGetElapsedTimeMillis() - ulastDate)*sens;
+                    float tau = (date - ulastDate)*sens;
+#ifdef REAL_TIME_FX
+                    tau /= app->maxFrameRate/ofGetFrameRate();
+#endif
+                    uelapsed += tau;
+                    
                 }
-                if(uelapsed<0)
+                if(uelapsed<0){
                     sens = 1;
+                    uelapsed = 0;
+                }
                 
-                ulastDate = (int) ofGetElapsedTimeMillis();
+                ulastDate = (int) date;
+
                 if(BPMDivision==0){
                     v = getValue(ofMap(uelapsed, 0, uDuration, 0, 1, true));
                     if(uelapsed>uDuration || uelapsed <0)
@@ -92,7 +108,7 @@ public:
             }break;
             default:{
                 if(invert==1){
-                    v =  ! app->deltaMap[parameterName];
+                    v =  ! app->deltaMap[parameterID];
                 }else{
                     if(random==0){
                         v = getValue(value);
@@ -115,16 +131,22 @@ public:
         if((type==TIMED || type==BPM) && random>0){
             if(timedRandom){
                 v = getValue(ofRandom(1));
-                app->deltaMap[parameterName] = app->parameterMap[parameterName] = v;
+                if(bin)
+                    v = v>0 ? 1 : 0;
+                if(is_int)
+                    v = ceil(v);
+                app->deltaMap[parameterID] = app->parameterMap[parameterID] = v;
             }
         }else{
             if(bin)
                 v = v>0 ? 1 : 0;
+            if(is_int)
+                v = ceil(v);
             
             if(transcient){
-                app->parameterMap[parameterName] = v;
+                app->parameterMap[parameterID] = v;
             }else{
-                app->deltaMap[parameterName] = v;
+                app->deltaMap[parameterID] = v;
             }
         }
         lastValue = v;
@@ -148,7 +170,7 @@ public:
     std::string toString(){
         string str;
 
-        if(app->parameterIDMap[parameterName].compare("")){
+        if(app->parameterIDMap[parameterID].compare("")){
         
         switch(type){
             case AUDIO:
@@ -186,7 +208,7 @@ public:
     
     std::string getCoreStr(){
         string str;
-        str += app->parameterIDMap[parameterName] + ",";
+        str += app->parameterIDMap[parameterID] + ",";
         for(int i=0;i<values.size();i++)
             str += ofToString(values[i]) + ((i<values.size()-1) ? "/" : "");
         if(type!=BPM && type!=TIMED)
@@ -196,10 +218,10 @@ public:
     
     
     AbstractApp* app;
-    int parameterName = 0;
+    int parameterID = 0;
     AutoType type;
     vector<float> values;
-    float smoothing = 0;
+    float smoothing = 1;
     string args;
     
     float inputMinValue = 0;
@@ -228,8 +250,14 @@ public:
     float lastRandom = 0;
     float targetValue = 0;
     
+    /*** OPTIONS **/
     bool bin = false;
+    bool is_int = false;
     bool transcient = false;
+    bool saw = false;
+    
+    /** MISC/UTILS */
+    bool midiLearnt = false;
     
 private:
     int ulastDate = -1;

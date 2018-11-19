@@ -7,38 +7,47 @@ void AbstractApp::initParameters(){
     parameterMap[post_traitement] = 1;
     parameterMap[omg3D] = false;
     parameterMap[omg3DAngle] = 60;
-    parameterMap[test] = false;
-    parameterMap[test2] = false;
-    parameterMap[test3] = false;
     parameterMap[omg3D2] = 0;
-    parameterMap[omg3D2Dist] = 0.5;
+    parameterMap[omg3D2Dist] = 1;
     parameterMap[omg3D2x2] = 0;
     parameterMap[omg3D2X] = 0;
     parameterMap[omg3D2Y] = 0;
     parameterMap[omg3D2Alpha0] = 1;
-    parameterMap[omg3D2AlphaZ] = false;
+    parameterMap[omg3D2AlphaZ] = 1;
     parameterMap[omg3D2RollerX] = 0;
     parameterMap[omg3D2RollerY] = 0;
-    parameterMap[omg3D2Symetry] = false;
+    parameterMap[omg3D2Symetry] = 0;
     parameterMap[omg3D2Rotation] = 0;
+    parameterMap[omg3D2Acc] = 0;
+    parameterMap[omg3D2DOF] = 0;
+    
+    parameterMap[scan] = 0;
+    
     parameterMap[divergence] = 0;
-    parameterMap[yDivergence] = 0;
+    parameterMap[divergenceZ] = 0;
+    parameterMap[divergenceY] = 0;
     parameterMap[omg3D2Speed] = 0.005;
     parameterMap[omg3D2FreeRotation] = false;
     parameterMap[omg3D2AvoidCenter] = 0;
     parameterMap[aDivergence] = 0;
-    parameterMap[omg3D2Scale] = 0;
     parameterMap[omg3D2Strobe] = 0;
     parameterMap[omg3D2Depth] = 1;
     parameterMap[thresholdAfterBall] = false;
     parameterMap[glowResolution] = 25;
     parameterMap[borderMask] = 0;
+    parameterMap[borderMaskd0] = 0;
+    parameterMap[jpgGlitch] = 0;
+    parameterMap[keying] = 0;
+    parameterMap[background] = 0;
+    parameterMap[engraving] = 0;
     
     parameterMap[randHHide]=0;
     parameterMap[randVHide]=0;
     parameterMap[glow] = false;
     parameterMap[sobel] = false;
+    parameterMap[sobelPostFX] = false;
     parameterMap[sobelMix] = 0;
+    parameterMap[whiteSobel] = false;
     parameterMap[gradient] = false;
     
     parameterMap[_gamma] = 1;
@@ -46,6 +55,7 @@ void AbstractApp::initParameters(){
     parameterMap[_invert] = false;
     parameterMap[vblur] = 0;
     parameterMap[hblur]= 0;
+    parameterMap[tiltShift]= 0;
     parameterMap[blurOriginalMix] = 1;
     parameterMap[sharpen] = 0;
     parameterMap[sharpenMode] = 0;
@@ -76,7 +86,7 @@ void AbstractApp::initParameters(){
     
     
     parameterMap[paint] = false;
-    parameterMap[paint2] = false;
+    parameterMap[paintSizeDelta] = 0.75;
     parameterMap[multiFbos] = false;
     
     /** COLOR MGMT **/
@@ -84,7 +94,6 @@ void AbstractApp::initParameters(){
     parameterMap[tintHue]=0;
     parameterMap[gradient]=0;
     parameterMap[tintBrightness] = 1;
-    parameterMap[tintCenter]=0;
     parameterMap[tintAmp] = 1;
     parameterMap[sidesSaturation] = 0.8;
     parameterMap[_reTint] = 0;
@@ -105,8 +114,8 @@ void AbstractApp::initParameters(){
     parameterMap[kaleiOffY] = 0;
     parameterMap[kaleiScale] = 1;
     
-    parameterMap[stripesAmp]=0.;
-    parameterMap[stripesSize]=0.1;
+//    parameterMap[stripesAmp]=0.;
+//    parameterMap[stripesSize]=0.1;
     parameterMap[skewAmp]=0.;
     parameterMap[skewDAmp]=0.;
     parameterMap[skewAAmp]=0.;
@@ -130,18 +139,19 @@ void AbstractApp::initParameters(){
     parameterMap[audio] = 0;
     parameterMap[_audioIn] = 0;
     
-    parameterMap[carder] = 0;
+    parameterMap[selSat] = 0;
     
     parameterMap[dualFocus] = -1;
     parameterMap[dualFocusIntensity] = 4;
     
     parameterMap[currentScene] = 0;
-    parameterMap[antiAliasing] = 1;
+    parameterMap[antiAliasing] = 0;
     
-    parameterMap[FXMode] = 0; //0: all, 1: scene 0 only, -1: scene 1 only, etc...
+    parameterMap[selectiveShading] = 0; //0: all, 1: scene 0 only, -1: scene 1 only, etc...
     
     
-    parameterMap[skewUpdateRate] = 0;
+    parameterMap[_loadMacro] = 0;
+    parameterMap[macroFade] = 0;
     parameterMap[skewJumpRate]= 0.4; //B4 0.025
     parameterMap[skewHard] = 0;
     parameterMap[skewBandingProb] = 0.025;
@@ -185,7 +195,8 @@ void AbstractApp::initParameters(){
     
     parameterMap[debug] = 0;
     
-    
+    parameterMap[lcd] = 0;
+
     
     /** AGENTS **/
     parameterMap[agentSpeed] = 0.25;
@@ -198,14 +209,13 @@ void AbstractApp::initParameters(){
     parameterMap[agentAngleFreq] = 1;
     
     /** FEEBACK **/
-    parameterMap[feedMode] = MODE_FEEDBACK;
+    parameterMap[feedBack] = 0;
     
     parameterMap[nbPoints]=0;
     parameterMap[mediaAlpha] = 1;
-    parameterMap[mediaSaturation] = 1;
     parameterMap[blackCenter] = true;
-    parameterMap[pointx]=0;
-    parameterMap[pointy]=0;
+    parameterMap[customBorders]=0;
+//    parameterMap[pointy]=0;
     parameterMap[feedbackRemanence] = 1;
     
     parameterMap[noSource] = false;
@@ -218,8 +228,8 @@ void AbstractApp::initParameters(){
     parameterMap[upRot] = 0;
     parameterMap[pitchRot] = 0;
     parameterMap[scale] = 0.95;
-    parameterMap[offx]=0;
-    parameterMap[offy]=0;
+//    parameterMap[offx]=0;
+//    parameterMap[offy]=0;
     parameterMap[pace] = 0.1f;
     
     parameterMap[f_strobe] = 0;
@@ -234,24 +244,25 @@ void AbstractApp::initParameters(){
     parameterMap[shapeWeight]=1;
     parameterMap[randomShapeColor] = false;
     
+    parameterMap[tiles] = 0;
+    
     /** PRINT **/
     parameterMap[randomText] = false;
-    parameterMap[seqText] = true;
+    parameterMap[seqText] = false;
     parameterMap[randomFont] = true;
     parameterMap[txt_randPosition] = false;
     parameterMap[txt_randSize] = 0;
     parameterMap[nWords] = 1;
     parameterMap[txt_accumulate] = false;
     parameterMap[txt_fill] = false;
-    parameterMap[fontSize] = 125;
+    parameterMap[fontSize] = 70;
     parameterMap[txt_rate] = 387; //ms
     parameterMap[wordLimit] = 1000;
 
     
     /** LINES **/
     parameterMap[updateLen] = 200;
-    parameterMap[speed] = 10;
-    parameterMap[shapeWeight] = 0;
+    parameterMap[speed] = 1;
     parameterMap[lines_yWeight] = 1;
     parameterMap[lines_zWeight] = 1;
     parameterMap[lines_zSquare] = 0;
@@ -272,16 +283,16 @@ void AbstractApp::initParameters(){
     parameterMap[jumpTo] = 0;
     parameterMap[hMirror] = false;
     parameterMap[vMirror] = false;
-    parameterMap[mixer] = true;
+    parameterMap[paintResolution] = 0.01;
     parameterMap[selectedPlayer] = 0;
     parameterMap[syncToTempo] = false;
     parameterMap[circle] = 0; //1 : circle
     parameterMap[circleSpeed] = 1/20.0;
     parameterMap[circleRotation] = 1;
     parameterMap[circleDist] = 1;
-    parameterMap[z] = 1;
+    parameterMap[macro] = 0;
     parameterMap[blendType] = ALPHABLACK;
-    parameterMap[feedback] = false;
+    parameterMap[doubleFeedback] = false;
     parameterMap[randomSpeed] = 0;
     parameterMap[selectedPlayer] = 0;
 
@@ -290,24 +301,15 @@ void AbstractApp::initParameters(){
     parameterMap[autoSwitchImg] = false;
     parameterMap[randomUzi] = false;
     parameterMap[uziPeriod] = 4;
-    parameterMap[nextImg] = false;
     parameterMap[doubleInversion] = false;
     parameterMap[backMask] = false;
     parameterMap[_mask] = false;
     parameterMap[resize] = true;
-//    parameterMap[kenBurns] = 0;
-//    parameterMap[kenBurnsZ_end] = 1;
-//    parameterMap[kenBurnsZ] = 0.0;
-//    parameterMap[kenBurnsZ_pos] = 0;
-//    parameterMap[kenBurnsZ_min] = 1.;
-//    parameterMap[kenBurnsZ_max] = 1.5;
     parameterMap[autoRot] = 0;
     parameterMap[autoRotFreq] = 1;
     parameterMap[ak47Mode] = false;
     parameterMap[ak47Frame] = false;
     parameterMap[lastAk47Index] = 0;
-    parameterMap[parallax] = 0;
-    parameterMap[parallax_res] = 1;
     parameterMap[swapTint] = 0;
     parameterMap[transluscentUzi] = 0;
     
@@ -316,7 +318,7 @@ void AbstractApp::initParameters(){
     parameterMap[draw_maxConnectionLength] = 80; //should be in pts
     parameterMap[draw_minConnectionLength]  = 5;
     parameterMap[draw_pace]  = 0.05;
-    parameterMap[draw_divergence]  = 0;
+    parameterMap[draw_hold]  = 0;
     
     parameterMap[draw_destroy]  = 0;
     parameterMap[draw_destroyMode]  = 0;
@@ -333,20 +335,18 @@ void AbstractApp::initParameters(){
     parameterMap[draw_zSpeed] = 0;
     
     parameterMap[bw] = 0;
+    parameterMap[bwOffset] = 0;
     parameterMap[draw_freskSpeed] = 1;
     
     parameterMap[draw_consecutive] = 0;
     //        parameterMap[draw_simplify] = 0;
     
-    parameterMap[fractalMode] = 2;
+    parameterMap[frameRate] = 30;
     parameterMap[draw_destruction] = 0;
     
-    /** FRACTALS **/
-    parameterMap[fractalP1] = 0;
-    parameterMap[fractalP2] = 0.5;
-    parameterMap[fractalScale] = 1;
-    parameterMap[fractalMode] = 0;
-    parameterMap[fractalIterations] = 60;
+    parameterMap[otherWorlds] = 0;
+    parameterMap[mediaScaleX] = 1;
+    parameterMap[mediaScaleY] = 1;
     
     /** GLITCH **/
     parameterMap[glitch_mode] = PTs;
@@ -368,7 +368,7 @@ void AbstractApp::initParameters(){
     parameterMap[kinectRender] = 1;
     
     /** UTILS **/
-    parameterMap[MIDIMappingAutoLoad] = 0;
+    parameterMap[randomJump] = 0;
     
     /** ECHOES **/
     parameterMap[echoRandom] = 0;
@@ -380,7 +380,7 @@ void AbstractApp::initParameters(){
     /** LED **/
     parameterMap[ledMode]=0;
     parameterMap[ledSync]=0;
-    parameterMap[ledPeriod]=1000/restrictFrameRate;
+    parameterMap[ledPeriod]=1000/maxFrameRate;
     parameterMap[ledInfo]=0;
     parameterMap[ledBrightness]=1.0;
     parameterMap[ledEvent] = 0;
@@ -398,12 +398,14 @@ void AbstractApp::initParameters(){
     parameterMap[user5] = 0;
 
     /** PERTURBATION **/
+    parameterMap[pnoise] = 0;
     parameterMap[pert] = 0;
     parameterMap[pertEvo] = 0;
     parameterMap[pertEvoAuto] = 0;
     parameterMap[pertPersistance] = .5;
-    parameterMap[pertFreq] = 10;
+    parameterMap[pertFreq] = 5;
     parameterMap[pertMode] = 0;
+    parameterMap[pertHue] = 0;
     
     parameterMap[glitchFreq] = 45;
     
@@ -414,6 +416,7 @@ void AbstractApp::initParameters(){
     parameterMap[noise] = 0;
     
     parameterMap[mandala] = 0;
+    parameterMap[mandalaBorder] = 0;
     parameterMap[squareMandala] = 0;
     
     parameterMap[hueFilter] = 0;
@@ -423,6 +426,11 @@ void AbstractApp::initParameters(){
    
     parameterMap[whitePoint] = 1;
     parameterMap[blackPoint] = 0;
+    
+    parameterMap[typhoon] = 0;
+    parameterMap[taijin] = 0;
+    parameterMap[illu]  = 0;
+    parameterMap[surprise]  = 0;
 
     parameterMap[oscIn] = OSC_INPUT;
     
@@ -446,69 +454,5 @@ void AbstractApp::randomParameters(){
     }
     deltaMap[_gamma] = parameterMap[_gamma] = 1;
 }
-
-//void AbstractApp::niceRandom(int x){
-//    if(scenes[0]==cinema){
-//        cinema->randomJump();
-//    }
-//    
-//    switch(x){
-//        case 0:{ // tunnel
-//            deltaMap[omg3D2] = 1;
-//            deltaMap[omg3D2Dist] = ofRandom(0.5,1);
-//            deltaMap[omg3D2Rotation] = 45*(int) ofRandom(0,12);
-//            deltaMap[omg3D2HardRotation] = 1;
-//            deltaMap[kalei] = (int) ofRandom(0,2);
-//            deltaMap[kaleiNb] = (int) ofRandom(0,5);
-//            
-//            deltaMap[pert] = 0;
-//            deltaMap[skewAmp] = 0;
-//            deltaMap[_reTint] = 0;
-//            deltaMap[tintSaturation] = 1;
-//            deltaMap[displaceAmp] = 0;
-//            deltaMap[sobel]  = 0;
-//            deltaMap[hueShift] = 0;
-//            
-//            
-//        }break;
-//        case 1:{ //liquid
-////            deltaMap[_invert] = ofRandom(0, 1) < 0.5 ? 0 : 1;
-//            deltaMap[tintSaturation] = (int) ofRandom(0, 2);
-//            deltaMap[sobel] = ofRandom(0, 1) * (int) ofRandom(0, 2);
-//            deltaMap[pert] = ofRandom(0, 1) * (int) ofRandom(0, 2);
-//            deltaMap[pertEvoAuto] = ofRandom(0, 0.2);
-//            deltaMap[pertFreq] = ofRandom(1, 10);
-//            deltaMap[skewAmp] = ofRandom(0, 1) * (int) ofRandom(0, 2);
-//            
-//            
-//            deltaMap[omg3D2] = 0;
-//            deltaMap[kalei] = 0;
-//            deltaMap[displaceAmp] = 0;
-//            deltaMap[_reTint] = 0;
-//            deltaMap[hueShift] = 0;
-//        }break;
-//        case 2:{ //glitch
-//            deltaMap[tintHue] = ofRandom(0, 1);
-//            deltaMap[_reTint] = ofRandom(0, 1);
-////            deltaMap[_invert] = ofRandom(0, 1) < 0.5 ? 0 : 1;
-//            deltaMap[hueShift] = ofRandom(0, 1);
-//            deltaMap[hueShiftCrazy] = (int) ofRandom(0, 2);
-//            deltaMap[sobel] = ofRandom(0, 1) * (int) ofRandom(0, 2);
-//            deltaMap[pert] = ofRandom(0, 1) * (int) ofRandom(0, 2);
-//            deltaMap[displaceAmp] = ofRandom(0, 1) * (int) ofRandom(0, 2);
-//            deltaMap[displaceProba] = pow(ofRandom(0, 1), 3);
-//            deltaMap[nFreeze] = ofRandom(0, 6) * (int) ofRandom(0, 2);
-//            
-//            deltaMap[omg3D2] = 0;
-//            deltaMap[kalei] = 0;
-//            deltaMap[pert] = 0;
-//            deltaMap[skewAmp] = 0;
-//            deltaMap[tintSaturation] = 1;
-//        }break;
-//        default:;
-//    }
-////     for(int p=0;p<=N_PARAM;p++)
-////         deltaMap[p] = parameterMap[p];
-//}
 
 #endif

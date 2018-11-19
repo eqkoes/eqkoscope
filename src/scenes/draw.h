@@ -107,18 +107,18 @@ public:
                         if(v1.size()==3 && v2.size()==3 && v3.size()==3){
                             ofMeshFace f;
                             f.setVertex(0, ofVec3f(ofToFloat(v1[0]), ofToFloat(v2[0]),ofToFloat(v3[0])));
-                            f.setTexCoord(0, ofVec3f(ofToFloat(v1[1]), ofToFloat(v2[1]),ofToFloat(v3[1])));
+//                            f.setTexCoord(0, ofVec3f(ofToFloat(v1[1]), ofToFloat(v2[1]),ofToFloat(v3[1])));
                             f.setNormal(0, ofVec3f(ofToFloat(v1[2]), ofToFloat(v2[2]),ofToFloat(v2[3])));
                         } else{
                             if(v1.size()==2 && v2.size()==2 && !v3.empty()){
                                 mesh.addVertex(vertices[ofToInt(v1[0])-1]);
-                                mesh.addTexCoord(textures[ofToInt(v1[1])-1]);
+//                                mesh.addTexCoord(textures[ofToInt(v1[1])-1]);
                                 
                                 mesh.addVertex(vertices[ofToInt(v2[0])-1]);
-                                mesh.addTexCoord(textures[ofToInt(v2[1])-1]);
+//                                mesh.addTexCoord(textures[ofToInt(v2[1])-1]);
                                 
                                 mesh.addVertex(vertices[ofToInt(v3[0])-1]);
-                                mesh.addTexCoord(textures[ofToInt(v3[1])-1]);
+//                                mesh.addTexCoord(textures[ofToInt(v3[1])-1]);
                             }
                         }
                                                 continue;
@@ -148,8 +148,6 @@ public:
         ofSetColor(ofColor::white);
         int connections[(int)DRAWNPTS] = {0};
         int closest[(int)DRAWNPTS] = {0};
-        
-        float p = app->parameterMap[draw_points];
         
         
        /* if(importedMesh)
@@ -221,8 +219,8 @@ public:
             
 
             for(int i=0;i<linePts1.getNumVertices();i++){
-                if(p>2){
-                    ofEllipse(linePts1.getVertex(i).x, linePts1.getVertex(i).y, linePts1.getVertex(i).z, p, p);
+                if(app->parameterMap[draw_points]>2){
+                    ofEllipse(linePts1.getVertex(i).x, linePts1.getVertex(i).y, linePts1.getVertex(i).z, app->parameterMap[draw_points], app->parameterMap[draw_points]);
                 }
                 mesh.addVertex(linePts1.getVertex(i));
                 mesh.addVertex(linePts2.getVertex(i));
@@ -241,7 +239,7 @@ public:
                     ofColor c1 = linePts1.getColor(i);
                     ofColor c2 = linePts2.getColor(i);
                         float dx;
-                        float dd = (linePts1.getVertex(i).distance(linePts2.getVertex(i))-dm) / (dM-dm);
+                        float dd =  ((linePts1.getVertex(i) - linePts2.getVertex(i)).length() - dm) / (dM-dm);
                         if(dbd==1)
                             dx =  255 - 200 * pow(dd,dbd);
                         else
@@ -316,7 +314,7 @@ public:
             ofEnableArbTex();
             }
         }
-        if(p==1){
+        if(app->parameterMap[draw_points]==1){
             mesh.setMode(OF_PRIMITIVE_POINTS);
             for(int i=0;i<app->parameterMap[shapeWeight];i++){
                 ofTranslate(0,1*i);
@@ -365,14 +363,14 @@ public:
             liveInterpolate();
         }
         
-        if(ofGetFrameNum()%100==0) //grab focus
-#ifndef ROZLAV
-#ifdef DEBUG
-            ofSystem("open -a eqkoscopeDebug.app");
-#else
-        ofSystem("open -a eqkoscope.app");
-#endif
-#endif
+//        if(ofGetFrameNum()%100==0) //grab focus : useful when using tablets
+//#ifndef ROZLAV
+//#ifdef DEBUG
+//            ofSystem("open -a eqkoscopeDebug.app");
+//#else
+//        ofSystem("open -a eqkoscope.app");
+//#endif
+//#endif
         
         if(embedScene!=0)
            embedScene->update();
@@ -459,8 +457,10 @@ public:
                 perturbations.push_back(ofVec3f(0,0));
         }
         
-        if(app->parameterMap[draw_random] && ofGetFrameNum() % (int)app->parameterMap[draw_randomRate] == 0){
-            float rf = app->parameterMap[draw_random]*25;
+
+        int rRate = max((int)app->parameterMap[draw_randomRate] , 1);
+        if(app->parameterMap[draw_random] && ofGetFrameNum() % (int)rRate== 0){
+            float rf = app->parameterMap[draw_random]*HEIGHT/2;
             int n = currentDrawNb;
             if(importedMesh)
                 n = perturbations.size();
@@ -559,13 +559,20 @@ public:
             computeFractals();
         }
         
+        if(app->parameterMap[draw_hold]>0 &&
+           (ofGetMouseX() + app->parameterMap[draw_ox] != hold_x || ofGetMouseY() + app->parameterMap[draw_oy] != hold_y)){
+            hold_x = ofGetMouseX() + app->parameterMap[draw_ox];
+            hold_y = ofGetMouseY() + app->parameterMap[draw_oy];;
+            recordPoint(ofGetMouseX(), ofGetMouseY(), 0, ofColor::white);
+        }
+        
         shapeMutex.unlock();
     }
     
     void computeFractals(){
-        vector<ofVec3f> add1, add2;
+       /* vector<ofVec3f> add1, add2;
         for(int i=fractalIndex;i<linePts1.getNumVertices();i++){
-            float d = linePts1.getVertex(i).distance(linePts2.getVertex(i));
+            float d = (linePts1.getVertex(i) - (linePts2.getVertex(i))).length();
             if(d<=1){ //fractal limit
                 add1.push_back(linePts1.getVertex(i));
                 add2.push_back(linePts2.getVertex(i));
@@ -574,7 +581,7 @@ public:
             ofVec3f middle = (linePts1.getVertex(i)+linePts2.getVertex(i))/2.0;
             float amp;
             
-            /** TRAIS **/
+            ///TRAIS
             switch((int) app->parameterMap[fractalMode]){
                 case FRACTAL_LINE:{
                     amp = 0.6;
@@ -634,7 +641,7 @@ public:
             linePts2.addVertex(add2[i]);
         }
         fractalLevel++;
-        fractals--;
+        fractals--;*/
     }
     
     void setAnalyzeLines(){
@@ -677,12 +684,14 @@ public:
                 distances[b][a] = distance/DRAWNPTS;
             }
         }
+        #ifdef VERBOSE
         cout << "Distances" << endl;
         for(int a=0;a<allpts.size();a++){
             for(int b=0;b<allpts.size();b++)
                 cout << distances[a][b]  << " | ";
             cout << endl;
         }
+#endif
     }
     
     //load indexed points db
@@ -858,17 +867,19 @@ public:
         ofDirectory dir("draw/");
         dir.listDir();
         vector<string> dirs;
-        for(int i=0;i<dir.numFiles();i++){
+        for(int i=0;i<dir.size();i++){
             string d = dir.getPath(i);
             if(d.find(".jpg")!=string::npos || d.find(".png")!=string::npos || d.find(".gif")!=string::npos||d.find(".JPG")!=string::npos || d.find(".PNG")!=string::npos || d.find(".GIF")!=string::npos){
                 ofImage* i = new ofImage;
                 i->allocate(WIDTH, HEIGHT, OF_IMAGE_COLOR_ALPHA);
                 i->loadImage(d);
+                #ifdef VERBOSE
                 cout << "analyzing " << d << endl;
-                if(i->width > i->height)
-                    i->resize(WIDTH, i->height*WIDTH/i->width);
+#endif
+                if(i->getWidth() > i->getHeight())
+                    i->resize(WIDTH, i->getHeight()*WIDTH/i->getWidth());
                 else
-                    i->resize(i->width*HEIGHT/i->height, HEIGHT);
+                    i->resize(i->getWidth()*HEIGHT/i->getHeight(), HEIGHT);
                 allImgs.push_back(i);
                 
                 vector<ofVec3f> p, ptemp, redp, p_polar;
@@ -876,16 +887,16 @@ public:
                 int x=0, y=0;
                 //random until 300
                 
-                for(int y=0;y<i->height;y+=granularity){
-                    for(int x=0;x<i->width;x+=granularity){
+                for(int y=0;y<i->getHeight();y+=granularity){
+                    for(int x=0;x<i->getWidth();x+=granularity){
                         int xx = x;
                         int yy = y;
                         if(i->getColor(xx, yy).getSaturation()>200){
-                            redp.push_back(ofVec3f(xx-i->width/2, yy-i->height/2));
+                            redp.push_back(ofVec3f(xx-i->getWidth()/2, yy-i->getHeight()/2));
                         }else{
                             if(i->getColor(xx, yy).getBrightness()<50){
                                 // ptemp.push_back(ofVec3f(xx-i->width/2, yy-i->height/2));
-                                ptemp.push_back(ofVec3f(xx-i->width/2, yy-i->height/2, ofDist(xx-i->width/2,yy-i->height/2,0,0))); //3D
+                                ptemp.push_back(ofVec3f(xx-i->getWidth()/2, yy-i->getHeight()/2, ofDist(xx-i->getWidth()/2,yy-i->getHeight()/2,0,0))); //3D
                             }
                         }
                     }
@@ -931,7 +942,9 @@ public:
                 
                 allpts.push_back(p);
                 allpts_polar.push_back(p_polar);
+                #ifdef VERBOSE
                 cout << "recalled " << p.size() << " points (" << redp.size() << " red)" << endl;
+#endif
             }else{
                 if(d.find(".csv")!=string::npos){
                     vector<ofVec3f> p;
@@ -956,7 +969,7 @@ public:
     
     /** INTERACTION **/
     void mousePressed(int x, int y, int button){
-        if(app->isCmdModifier && recPts.size()>0){
+        if(app->keyIsDown[OF_KEY_COMMAND] && recPts.size()>0){
             recordPoint(x,y,0, ofColor::white);
             interpolatePoints = true;
             interpolateI1 = recPts.size()-2;
@@ -1013,6 +1026,8 @@ public:
                 dest = &recPts;
                 app->deltaMap[draw_recording] = 1;
             }
+            
+            
             recPts.push_back(v);
             colors.push_back(color);
             setAnalyzeLines();
@@ -1020,6 +1035,7 @@ public:
             str << "draw/testDB/" << app->parameterMap[draw_currentDrawing]  << ".csv";
             savePoints(str.str(), &recPts);
         }
+        
         currentDrawNb = recPts.size();
     }
     
@@ -1082,7 +1098,6 @@ public:
     /** CONTROLS **/
     
     void keyPressed(int key){
-        cout << key << endl;
         switch(key){
             case 'e':{
                 destruction(EXPLODE);
@@ -1122,7 +1137,7 @@ public:
                 //                doMidLine();
                 break;
             case ' ':{
-                _createLightning(app->isCmdModifier ? 4 : 1, -HEIGHT/2, 0);
+                _createLightning(app->keyIsDown[OF_KEY_COMMAND] ? 4 : 1, -HEIGHT/2, 0);
             }break;
             case '+':{
                 _createLightning(4, -HEIGHT/2, 0);
@@ -1149,42 +1164,7 @@ public:
                 switch(eventArgs.status){
                     case MIDI_CONTROL_CHANGE:{
                         switch(eventArgs.control){
-                                app->deltaMap[draw_maxConnectionLength] = 50; //should be in pts
-                                app->deltaMap[draw_pace]  = 0.05;
-                                app->deltaMap[draw_divergence]  = 0;
-                                
-                                app->deltaMap[draw_destroy]  = 0;
-                                app->deltaMap[draw_destroyMode]  = 0;
-                                app->deltaMap[draw_recInterval]  = 7; //should be in pts
-                                app->deltaMap[draw_currentDrawing]  = 0;
-                                app->deltaMap[draw_random]  = 0.1;
-                                app->deltaMap[draw_randomRate]  = 5;
-                                app->deltaMap[draw_lines] = 1;
-                                app->deltaMap[draw_points] = 0;
-                                
-                            case 1:
-                                app->deltaMap[draw_maxConnectionLength] = 100*value/127.0 ;
-                                analyzeLines = true;
-                                break;
-//                            case 2:
-//                                app->parameterMap[draw_lines] = value<64 ;
-//                                break;
-//                            case 4:
-//                                app->parameterMap[draw_random] = 3*value/127.0 ;
-//                                break;
-                                
-                            case 5:
-                                app->deltaMap[draw_zSpeed] = (value<60 || value>68) ? 50*(value-64)/127.0 : 0;
-                                break;
-                                
-                            case 19:
-                                transType = value<64 ? ANGLE : DISTANCE;
-                                break;
-                            case 18:
-                                app->deltaMap[draw_pace] = (1+value)/127.0 * 0.25;
-                                break;
-                                
-                        }
+                                                }
                     }break;
                     case MIDI_NOTE_ON:{
                         int pitch = eventArgs.pitch;
@@ -1207,7 +1187,7 @@ public:
         (*xml) << "<draw>" << endl;
         (*xml) << "</draw>" << endl;
     }
-    void loadMacro(ofXml *xml){
+    void loadMacro(TiXmlHandle *xml){
         
         
     }
@@ -1220,7 +1200,7 @@ public:
     
     Cinema* embedScene = 0;
     
-    void setResolution(int r){
+    void setResolution(){
         
     }
 
@@ -1301,6 +1281,8 @@ protected:
     
     vector< float > createLightning;
     vector< ofVec3f > lightningPoint;
+    
+    int hold_x = 0,hold_y = 0;
     
 };
 

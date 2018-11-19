@@ -3,19 +3,22 @@
 
 #include "eqkoscope.h"
 #include <sys/types.h>
+#ifndef WIN32
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#endif
 
 void eqkoscope::initOSC(){
     receiver.setup(OSC_INPUT);
+    string myIP = "";
 
-    //get my IP address
+#ifndef WIN32
+    /// Get my IP address
     struct ifaddrs * ifAddrStruct=NULL;
     struct ifaddrs * ifa=NULL;
     void * tmpAddrPtr=NULL;
     getifaddrs(&ifAddrStruct);
-    string myIP = "";
     for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
         if (!ifa->ifa_addr)
             continue;
@@ -39,7 +42,8 @@ void eqkoscope::initOSC(){
         //        }
     }
     if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
-    
+#endif
+
     if(myIP.compare("")){
         string mask = myIP;
         int i = mask.find_last_not_of(".");
@@ -59,9 +63,9 @@ bool eqkoscope::manageOSCParam(ofxOscMessage* m){
     bool ret = false;
     vector<string> elts = ofSplitString(m->getAddress(), ",");
     for(int i=0;i<elts.size();i++){
-        if(parameterNameMap.count(elts[i])){
-            int id = parameterNameMap[elts[i]];
-            deltaMap[id] = parameterMap[id] = m->getArgAsFloat(i);
+        int pid = getParameterFromName(elts[i]);
+        if(pid>=0){
+            deltaMap[pid] = parameterMap[pid] = m->getArgAsFloat(i);
             ret = true;
         }
     }
@@ -77,11 +81,21 @@ void eqkoscope::manageOSC(){
     int count = 0;
     int maxCount = 100;
     while(receiver.hasWaitingMessages() && (++count<maxCount)){
+        oscHasReceivedMessages = true;
+        
         ofxOscMessage m;
-        receiver.getNextMessage(&m);
+        #ifdef OF_10
+        receiver.getNextMessage(m); //update TEST
+#else
+        receiver.getNextMessage(&m); //update TEST
+#endif
         
         if(strStartsWith(m.getAddress(), "/Ping")){
-            sender.setup(m.getRemoteIp(), 6666);
+            #ifdef OF_10
+            sender.setup(m.getRemoteHost(), 55);
+#else
+            sender.setup(m.getRemoteIp(), 55);
+#endif
             oscout("/Ping", 1);
             oscout("/Macros/Names", macroNames, 8*16);
             continue;
@@ -89,18 +103,20 @@ void eqkoscope::manageOSC(){
         
         if(!m.getAddress().compare("/MIDI/NoteOn") && m.getNumArgs()==3){
             ofxMidiMessage evt;
-            evt.portNum = -2;
+            evt.portNum = MIDI_MAX_NB_PORTS-1;
             evt.status = m.getArgAsInt32(1)>0 ? MIDI_NOTE_ON : MIDI_NOTE_OFF;
             evt.pitch = m.getArgAsInt32(0);
             evt.velocity = m.getArgAsInt32(1);
             evt.channel = m.getArgAsInt32(2);
+            #ifdef VERBOSE
             cout << "NOTE ON " << ofGetFrameNum() << " " << evt.channel <<  "" << evt.pitch  <<  endl;
+#endif
             newMidiMessage(evt);
             continue;
         }
         if(!m.getAddress().compare("/MIDI/CC") && m.getNumArgs()==3){
             ofxMidiMessage evt;
-            evt.portNum = -2;
+            evt.portNum = MIDI_MAX_NB_PORTS-1;
             evt.status = MIDI_CONTROL_CHANGE;
             evt.control = m.getArgAsInt32(0);
             evt.value = m.getArgAsInt32(1);
@@ -108,17 +124,53 @@ void eqkoscope::manageOSC(){
             newMidiMessage(evt);
             continue;
         }
-        
         if(!m.getAddress().compare("/MIDI/Audio") && m.getNumArgs()==2){
             //            cout << "audio msg count " << count << endl;
             audioOverOSC = true;
-            ofxMidiMessage evt;
+//            ofxMidiMessage evt;
             float gain = pow(10, (parameterMap[audioGain])/20.0);
             if(m.getArgAsInt32(1)<10){
                 currentRms[int(m.getArgAsInt32(1))] = m.getArgAsFloat(0)*gain;
             }
             continue;
         }
+        
+        if(strStartsWith(m.getAddress(), "/p/") && m.getNumArgs()==1){
+            int pid = getParameterFromName(m.getAddress().substr(3, m.getAddress().size()-3));
+                deltaMap[pid] = m.getArgAsFloat(0);
+            continue;
+        }
+        
+#ifdef JOSE
+        if(strStartsWith(m.getAddress(),"/30-BOULES_vite")){
+            int off = 15;
+            int on = 4;
+            float x = m.getArgAsFloat(0+off*on);
+            float y = m.getArgAsFloat(1+off*on);
+            float z = m.getArgAsFloat(2+off*on);
+            //deltaMap[upRot] = x;
+            //            deltaMap[glow] = abs(y)*0.5;
+            deltaMap[mediaX] = (x);
+            deltaMap[mediaY] = (y);
+            deltaMap[mediaZ] = 1 + (z);
+            continue;
+        }
+        
+        if(strStartsWith(m.getAddress(),"/30-BOULES")){
+            int off = 15;
+            int on = 3; //number of values per object
+            float x = m.getArgAsFloat(0+off*on);
+            float y = m.getArgAsFloat(1+off*on);
+            float z = m.getArgAsFloat(2+off*on);
+            //deltaMap[upRot] = x;
+//            deltaMap[glow] = abs(y)*0.5;
+//            deltaMap[mediaX] = (x)/10.0;
+//            deltaMap[mediaY] = (y)/10.0;
+//            deltaMap[mediaZ] = 1 + (z);
+            continue;
+        }
+#endif
+
         
         if(!m.getAddress().compare("/Macro") && m.getNumArgs()==2){
             loadMacro(getMacroFromMIDI(m.getArgAsFloat(0)*16 + m.getArgAsFloat(1)));

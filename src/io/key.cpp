@@ -1,5 +1,6 @@
 #include "eqkoscope.h"
 
+
 ofxMidiMessage createMessage(int pitch){
     ofxMidiMessage eventArgs;
     eventArgs.channel=3;
@@ -9,35 +10,39 @@ ofxMidiMessage createMessage(int pitch){
 }
 
 void eqkoscope::updatePromptValue(){
-    if(parameterNameMap.count(promptStr)>0){
-        lastPromptValue = ofToFloat(promptValue);;
-        lastPromptStr = promptStr;
-        int pid = parameterNameMap[promptStr];
-        parameterMap[pid] = deltaMap[pid] = ofToFloat(promptValue);
-        return;
-    }
+#ifndef OF_10
+    ofStringReplace(promptValue,"\x01", "");
+    ofStringReplace(promptStr,"\x01", "");
+#endif
     
-    if(parameterNameMap.count(quickPromptStr)>0){
-        lastPromptValue = ofToFloat(promptValue);;
-        lastPromptStr = quickPromptStr;
-        int pid = parameterNameMap[quickPromptStr];
-        parameterMap[pid] = deltaMap[pid] = ofToFloat(promptValue);
-        return;
+    int pid = getParameterFromName(promptStr);
+    if(pid>=0){
+        lastPromptStr = promptStr;
+    }else{
+        pid = getParameterFromName(quickPromptStr);
+        if(pid>=0){
+            lastPromptStr = quickPromptStr;
+        }else{
+            return;
+        }
     }
+
+    lastPromptValue = ofToFloat(promptValue);;
+
+    if( pid==ledTint && !promptValue.compare("hue"))
+        lastPromptValue = deltaMap[tintHue];
+        
+        parameterMap[pid] = deltaMap[pid] = lastPromptValue;
+        return;
 }
 
 void eqkoscope::keyReleased(int key){
-    switch(key){
-        case 4352: isCmdModifier = false;
-            break;
-        case 1280: isAltModifier = false;
-            break;
-        default:;
-    }
+    keyIsDown[key] = false;
 }
 
 void eqkoscope::keyPressed(int key){
-    logfile << ofGetElapsedTimeMillis() << " KeyPressed " << key << endl;
+
+    keyIsDown[key] = true;
     
     if(key==210){
         saveMacroTC = false;
@@ -46,14 +51,15 @@ void eqkoscope::keyPressed(int key){
         return;
     }
     
-    if(isCmdModifier){
+    
+    if(keyIsDown[OF_KEY_CONTROL] ){
         if(key=='s'){
-            saveMacroTC = !isAltModifier;
+            saveMacroTC = !keyIsDown[OF_KEY_ALT];
             saveCurrentMacro();
             saveMacroTC = true;
             return;
         }
-        if(key=='p'){
+        else if(key=='p'){
             stringstream str;
             str << "open " << + "/Users/Raph/Dev/of_v0.8.4_osx_release/apps/myApps/Feedback/bin/data/" << uzi->getCurrentMedia().c_str();
             cout << "CMD " << str.str() << endl;
@@ -64,8 +70,12 @@ void eqkoscope::keyPressed(int key){
     
     if(isPrompt) {
         
-        if(key==2304 || key==2305 || key==2306) //shift
+        if(key==OF_KEY_SHIFT || key==OF_KEY_COMMAND || key==3680) //shift
             return;
+#ifndef OF_10
+        if(key==2305 || key==2306) //shift
+            return;
+#endif
         if(key==OF_KEY_BACKSPACE){
             if(promptStr.size()==0){
                 isPrompt = false;
@@ -84,10 +94,87 @@ void eqkoscope::keyPressed(int key){
         }
         
         if(key==OF_KEY_RETURN){
+            
             if(!promptStr.compare("")){
                 isPrompt = false;
                 return;
             }
+            ///ONE LINERS
+            if(!promptStr.compare("save")){
+                saveCurrentMacro();
+                isPrompt = false;
+                return;
+            }
+            
+            if(!promptStr.compare("guru")){
+                if(guruQuotes.size()>0){
+                loadScene(print, 0);
+                    string str = guruQuotes[ofRandom(guruQuotes.size())];
+                    ofStringReplace(str, "//", "\n");
+                print->setText(str);
+                    deltaMap[fontSize] = 22;
+                    deltaMap[randomFont] = 0;
+                    print->updateFont();
+                }
+                isPrompt = false;
+                return;
+            }
+            
+            if(!promptStr.compare("oblique")){
+                if(obliqueQuotes.size()>0){
+                    loadScene(print, 0);
+                    string str = obliqueQuotes[ofRandom(obliqueQuotes.size())];
+                    ofStringReplace(str, "//", "\n");
+                    print->setText(str);
+                    deltaMap[fontSize] = 22;
+                    deltaMap[randomFont] = 0;
+                    print->updateFont();
+                }
+                isPrompt = false;
+                return;
+            }
+            
+            if(!promptStr.compare("open")){
+                ofFile file(currentMacroStr, ofFile::ReadOnly);
+                if(file.exists()){
+                    stringstream str;
+                    str << "open " << file.path() ;
+                    ofSystem(str.str());
+                }
+                isPrompt = false;
+                return;
+            }
+
+            if(!promptStr.compare("map")){
+                vector<string> splittedPaths = ofSplitString(MIDIMapPath, ":");
+                stringstream str;
+                for(string path : splittedPaths){
+                    str.clear();
+#ifdef OF_10
+        string tpath = ofBufferFromFile("../"+path).getText();
+#else
+        string tpath = ofBufferFromFile(ofFilePath::getCurrentWorkingDirectory() +  "/../../../" + path).getText();
+
+#endif
+                    ofFile file(tpath, ofFile::ReadOnly);
+                    if(file.exists()){
+                        str << "open " << file.path() ;
+                        ofSystem(str.str());
+                    }
+                }
+                return;
+            }
+            
+            if(!promptStr.compare("MIDI") && isPromptValue){
+                ///MIDI LEARN
+                int pid = getParameterFromName(promptValue);
+                if(pid >= 0 ){
+                    midiLearn = pid;
+                }
+                isPrompt = false;
+                return;
+            }
+            
             if(!isPromptValue){
                 isPromptValue = true;
                 promptValue = "";
@@ -95,39 +182,29 @@ void eqkoscope::keyPressed(int key){
                 isPrompt = false;
                 if(quickPromptStr.compare(""))
                     promptStr = quickPromptStr;
-                if(parameterNameMap.count(promptStr)>0){
+                
+                int pid = getParameterFromName(promptStr);
+                if(pid >=0 ){
                     lastPromptValue = ofToFloat(promptValue);;
                     lastPromptStr = promptStr;
                     updatePromptValue();
                     return;
                 }else{ //special commands
-                    if(!promptStr.compare("currentText"))
-                        print->currentText = promptValue;
-                    if(!promptStr.compare("featuredParameter") || !promptStr.compare("fp"))
-                        featuredParameter = parameterNameMap[promptValue];
-                    if(!promptStr.compare("lx"))
-                        leapXParameter = parameterNameMap[promptValue];
-                    if(!promptStr.compare("ly"))
-                        leapYParameter = parameterNameMap[promptValue];
-                    if(!promptStr.compare("lz"))
-                        leapZParameter = parameterNameMap[promptValue];
-                    if(!promptStr.compare("ldx"))
-                        leapDXParameter = parameterNameMap[promptValue];
-                    if(!promptStr.compare("ldy"))
-                        leapDYParameter = parameterNameMap[promptValue];
-                    if(!promptStr.compare("ldz"))
-                        leapDZParameter = parameterNameMap[promptValue];
-                    if(!promptStr.compare("lroll"))
-                        leapRollParameter = parameterNameMap[promptValue];
-                    if(!promptStr.compare("assignChannel"))
-                        assignChannel = ofToInt(promptValue);
-                    if(!promptStr.compare("assignCtrl"))
-                        assignCtrl = ofToInt(promptValue);
-                    if(!promptStr.compare("CMD"))
+                     if(!promptStr.compare("featuredParameter") || !promptStr.compare("fp"))
+                        featuredParameter = getParameterFromName(promptValue);
+                    if(!promptStr.compare("txt"))
+                        print->setText(promptValue);
+                    else if(!promptStr.compare("CMD"))
                         addCommand(promptValue, false);
-                    if(!promptStr.compare("moviePos"))
+                    else if(!promptStr.compare("BPM")){
+                        if(ofStringTimesInString(promptValue, ",")==0){
+                            addCommand("BPM,"+promptValue+",0/1,4", false);
+                        }else{
+                        addCommand("BPM,"+promptValue+",4", false);
+                        }
+                    }else if(!promptStr.compare("moviePos"))
                         cinema->setPosition( ofToFloat(promptValue));
-                    if(!promptStr.compare("HD"))
+                    else if(!promptStr.compare("HD"))
                         setResolution(ofToInt(promptValue));
                 }
             }
@@ -148,16 +225,31 @@ void eqkoscope::keyPressed(int key){
                         quickPrmptIndex = 0;
                     lookup = true;
                 }
-                if(key==9){
-                    if(quickPromptStr.compare(""))
+                if(key==OF_KEY_TAB      ){
+                    if(quickPromptStr.compare("")){
                         quickPrmptIndex++;
-                    else
+                    }else{
                         quickPrmptIndex = 0;
+                    }
                     lookup = true;
                 }
                 if(lookup){
                     int index = 0;
                     quickPromptStr = "";
+#ifdef OF_10
+                    for(int mi=0;mi<parameterIDMap.size();mi++){
+                        string s1 = parameterIDMap[mi];
+                        int pid = getParameterFromName(s1);
+                        if(strStartsWith(s1, promptStr) && pid >=0 ){
+                            if(index<quickPrmptIndex){
+                                index++;
+                                continue;
+                            }
+                            quickPromptStr = s1;
+                            break;
+                        }
+                    }
+#else
                     for(map<string, int>::iterator it=parameterNameMap.begin();it!=parameterNameMap.end();it++){
                         if(!strncmp(it->first.c_str(), promptStr.c_str(), promptStr.length())){
                             if(index<quickPrmptIndex){
@@ -168,6 +260,17 @@ void eqkoscope::keyPressed(int key){
                             break;
                         }
                     }
+                    for(map<string, int>::iterator it=parameterNameAliasMap.begin();it!=parameterNameAliasMap.end();it++){
+                        if(!strncmp(it->first.c_str(), promptStr.c_str(), promptStr.length())){
+                            if(index<quickPrmptIndex){
+                                index++;
+                                continue;
+                            }
+                            quickPromptStr = it->first;
+                            break;
+                        }
+                    }
+#endif
                 }else
                     promptStr += ((char) key);
             }else{
@@ -180,19 +283,9 @@ void eqkoscope::keyPressed(int key){
     
     if(saveMacros){
         //        cout << "new key " << key << " " << (int) key << endl;
-        if(key==2304 || key==2305 || key==2305) //ignore shift key
+        if(key==OF_KEY_SHIFT || key==OF_KEY_COMMAND || key>1000) //shift
             return;
-        if(key=='R'){
-            saveMacros = false;
-            return;
-        }
-        //        if(key=='L'){
-        //            saveMacroStr.append(".xml");
-        //            loadMacro(saveMacroStr);
-        //            saveMacroStr = macroPath;
-        //            saveMacros = false;
-        //            return;
-        //        }
+
         if(key==OF_KEY_RETURN){
             saveMacroStr.append(".xml");
             saveMacro(saveMacroStr);
@@ -236,60 +329,74 @@ void eqkoscope::keyPressed(int key){
     }
     
     switch(key){
-#ifdef GENETIC
-            case 'e':
-            genetic->eval(ofGetMouseX()/float(WIDTH));
-            break;
-#endif
             
-            case OF_KEY_TAB:
+        case OF_KEY_TAB:{
             guiVisible = !guiVisible;
-            break;
+//            guiCanvas->setVisible(guiVisible);
+            if(guiVisible){
+                updateGUI();
+            }
+        }break;
             
         case '@': reset();
             break;
         case '&': displayFrameRate = !displayFrameRate;
             break;
-        case '<':loadNextMacro();break;
-        case '>':loadPrevMacro();break;
+
         case 'g':
             if(savingGif){
                 //                gifEncoder.save("../capture/test.gif");
                 savingGif = false;
+                #ifdef VIDEO_EXPORT
                 if(!hasTakenVideo){
                     vidRecorder.close();
                     vidRecorderIndex++;
                 }
                 hasTakenVideo = true;
-
+#endif
             }else{
-                savingGif = true;
-                gifIndex = int(ofRandom(1,100000));
-               
-                if(!hasTakenVideo){
-                if(!vidRecorder.isInitialized()){
-                   vidRecorder.setup("capture/vid_"+ofGetTimestampString(), WIDTH, HEIGHT, 30, sampleRate, channels);
-                }
-                    vidRecorder.start();
-                }
+                startSequenceSave();
             }
             break;
-        case ':':
-            parameterMap[antiAliasing] = !parameterMap[antiAliasing];
-            break;
+            
         case '$':saveFrame = true;break;
-        case '_':updateSkew(skewVector);break;
-        case 'm':resetMidi(); break;
+        case 'm':
+            resetMidi();
+        break;
         case 'f':fullscreen = !fullscreen;ofSetFullscreen(fullscreen);break;
-        case 'o': loadScene(scenes[parameterMap[currentScene]]!=feedbackScene?feedbackScene:0, parameterMap[currentScene]);break;
-        case 'i': loadScene(scenes[parameterMap[currentScene]]!=fractal?fractal:0, parameterMap[currentScene]);break;
+            
+#ifndef EXPORT
+            
+#ifdef GENETIC
+        case 'e':
+            genetic->eval(ofGetMouseX()/float(WIDTH));
+            break;
+#endif
+        case ',':{
+            deltaMap[randomJump] = parameterMap[randomJump] = 1;
+        }break;
+        case '_':updateSkew(skewVector);break;
         case 't':loadScene(scenes[parameterMap[currentScene]]!=agents?agents:0, parameterMap[currentScene]);break;
-        case 'p':loadScene(scenes[parameterMap[currentScene]]!=cinema?cinema:0, parameterMap[currentScene]);break;
-        case 'u': loadScene(scenes[parameterMap[currentScene]]!=uzi?uzi:0, parameterMap[currentScene]);break;
-        case 'U': loadScene(scenes[parameterMap[currentScene]]!=uzis[0]?uzis[0]:0, parameterMap[currentScene]);break;
-        case 'l': loadScene(scenes[parameterMap[currentScene]]!=lines?lines:0, parameterMap[currentScene]);break;
         case 'j':loadScene(scenes[parameterMap[currentScene]]!=print?print:0, parameterMap[currentScene]);break;
-        case -1: loadScene(scenes[parameterMap[currentScene]]!=mapped?mapped:0, parameterMap[currentScene]);break;
+        case 'i': loadScene(scenes[parameterMap[currentScene]]!=mapped?mapped:0, parameterMap[currentScene]);break;
+#endif
+    case ',':{
+        deltaMap[randomJump] = parameterMap[randomJump] = 1;
+    }break;
+    case 'o': loadScene(scenes[parameterMap[currentScene]]!=feedbackScene?feedbackScene:0, parameterMap[currentScene]);break;
+    case '<':loadNextMacro();break;
+    case '>':loadPrevMacro();break;
+    case '(' : randomParameters();break;
+    case 'u': loadScene(scenes[parameterMap[currentScene]]!=uzi?uzi:0, parameterMap[currentScene]);break;
+    case 'l': loadScene(scenes[parameterMap[currentScene]]!=lines?lines:0, parameterMap[currentScene]);break;
+    case 'j':loadScene(scenes[parameterMap[currentScene]]!=print?print:0, parameterMap[currentScene]);break;
+    case 'y':loadSoloScene(drawscene); break;
+    case 'p':loadScene(scenes[parameterMap[currentScene]]!=cinema?cinema:0, parameterMap[currentScene]);break;
+case '0': localFrameNum = 0;break;
+
+//            case '+':
+//            deltaMap[macroFade] = 5;
+//            break;
         case '=': {pause =  !pause;
             for(int i=0;i<scenes.size();i++){
                 if(scenes[i]==cinema)
@@ -303,15 +410,11 @@ void eqkoscope::keyPressed(int key){
                 if(strip!=0)
                     strip->closeSerial();
         }break;
-            //        case 'i':parameterMap[invert] = !parameterMap[invert]; break;
-        case 'a': if(!safeMode) {parameterMap[audio] = !parameterMap[audio];
-            nbFramesSinceAudioStart = 0;
-        }break;
         case 'k':
             deltaMap[kalei] = deltaMap[kalei]==0 ? ofRandom(1) : 0;
             deltaMap[kaleiNb] = (int) ofRandom(-1,5);
             break;
-            //        case 'e': parameterMap[skewAmp] = parameterMap[skewAmp]>0 ? 0 : ofRandom(0.3); break;
+
         case 'q':xOffsetDelta-=5; break;
         case 'd':xOffsetDelta+=5; break;
         case 'z':yOffsetDelta-=5; break;
@@ -321,97 +424,37 @@ void eqkoscope::keyPressed(int key){
         case 'R' :         niceRandom(0);break;
         case 'T' :         niceRandom(1);break;
         case 'Y' :         niceRandom(2);break;
-        case 'r': if(!safeMode){saveMacros = !saveMacros;
+        case 'r':// if(!liveMode)
+        {saveMacros = !saveMacros;
             if(saveMacros)
                 saveMacroStr = macroPath;
         }break;
-        case '(':deltaMap[strobe] = !deltaMap[strobe]; break;
-        case ')':deltaMap[_invert] = !deltaMap[_invert]; break;
-        case '-':{deltaMap[omg3D2Speed] = min(max(deltaMap[omg3D2Speed]+0.003, -0.03), 0.03);  }break;
-//        case '_':{deltaMap[omg3D2Speed] = min(max(deltaMap[omg3D2Speed]-0.003, -0.03), 0.03);  }break;
-        case '7':deltaMap[omg3D2Speed] = -0.06; break;
-        case '8':deltaMap[omg3D2Speed] = 0.06; break;
-        case 'y':loadSoloScene(drawscene); break;
-        case 356:  posX += 20; break;
-        case 358: posX -= 20;break;
-        case 357: posY += 20;  break;
-        case 359:  posY -= 20; break;
-        case '!' :{ if(dualDisplay)
-            ofSetWindowPosition(-FINALWIDTH, 0);
-        } break;
-            
-            //MPD
-        case 'W':{
-            ofxMidiMessage eventArgs = createMessage(36);
-            newMidiMessage(eventArgs);
-        }break;
-        case 'X':{
-            ofxMidiMessage eventArgs = createMessage(37);
-            newMidiMessage(eventArgs);
-        } break;
-        case 'C':{
-            ofxMidiMessage eventArgs = createMessage(38);
-            newMidiMessage(eventArgs);
-        }break;
-        case 'V':{
-            ofxMidiMessage eventArgs = createMessage(39);
-            newMidiMessage(eventArgs);
-        } break;
-        case 'Q':{
-            ofxMidiMessage eventArgs = createMessage(40);
-            newMidiMessage(eventArgs);
-        } break;
-        case 'S':{
-            ofxMidiMessage eventArgs = createMessage(41);
-            newMidiMessage(eventArgs);
-        } break;
-        case 'D':{
-            ofxMidiMessage eventArgs = createMessage(42);
-            newMidiMessage(eventArgs);
-        } break;
-        case 'F':{
-            ofxMidiMessage eventArgs = createMessage(43);
-            newMidiMessage(eventArgs);
-        }break;
-        case 'A':{
-            ofxMidiMessage eventArgs = createMessage(44);
-            newMidiMessage(eventArgs);
-        }break;
-        case 'Z':{
-            ofxMidiMessage eventArgs = createMessage(45);
-            newMidiMessage(eventArgs);
-        }break;
-        case 'E':{
-            ofxMidiMessage eventArgs = createMessage(46);
-            newMidiMessage(eventArgs);
-        }break;
-            //        case 'R':{
-            //            ofxMidiMessage eventArgs = createMessage(47);
-            //            newMidiMessage(eventArgs);
-            //        }break;
-        case '1':{
-            ofxMidiMessage eventArgs = createMessage(48);
-            newMidiMessage(eventArgs);
-        }break;
-            //            case 233:{
-        case 2:{
-            ofxMidiMessage eventArgs = createMessage(49);
-            newMidiMessage(eventArgs);
-        }break;
-        case 3:{
-            ofxMidiMessage eventArgs = createMessage(50);
-            newMidiMessage(eventArgs);
-        }break;
-        case 4:{
-            ofxMidiMessage eventArgs = createMessage(51);
-            newMidiMessage(eventArgs);
-        }break;
-        case 4352: isCmdModifier = true;
+        case 'c':
+            MIDI_check_listen = !MIDI_check_listen;
             break;
-        case 1280: isAltModifier = true;
-            break;
+        case '!' :{
+            if(dualDisplay){
+                if(dualDisplay && app->addMirorDisplay)
+                    ofSetWindowPosition(-FINALWIDTH*2, 0);
+else
+                ofSetWindowPosition(-FINALWIDTH, 0);
+            }
+        } break;
+        case 'a' :{
+            surpriseParameters.clear();
+            for(int i=0;i<7;i++){
+                int r = -1;
+                do{
+                    r = ofRandom(338);
+                }while(std::find(stressTestFilterList.begin(), stressTestFilterList.end(), r) != stressTestFilterList.end());
+                surpriseParameters.push_back(r);
+            }
+            featuredParameter = surprise;
+        }break;
+      
         case 167: loadShaders();break;
     }
+    
     if(scenes[parameterMap[currentScene]]!=0)
         scenes[parameterMap[currentScene]]->keyPressed(key);
 }

@@ -22,7 +22,6 @@ public:
     Three(AbstractApp* app)
     :Scene(app, "three"){
         sceneID = "three";
-        cam = ofEasyCam();
         
         for(int i=0;i<1000;i++){
             points.push_back(ofVec3f(ofRandom(-1,1),ofRandom(-1,1),ofRandom(-1,1)));
@@ -48,10 +47,10 @@ public:
 //        app->featuredParameter = user1;
 
         
-        app->addCommand("NOTEON,user2,0.1/2,0.8,2,36/52 random", true); //bass
-        app->addCommand("NOTEON,pert,0/2,0.2,1,38 random,transcient", true); //batt
-        app->addCommand("NOTEON,warp,0/0.4,1,1,38 random", true); //batt
-        app->addCommand("NOTEON,user3,0/1,0.5,1,44 transcient", true); //batt
+//        app->addCommand("NOTEON,user2,0.1/2,0.8,2,36/52 random", true); //bass
+//        app->addCommand("NOTEON,pert,0/2,0.2,1,38 random,transcient", true); //batt
+//        app->addCommand("NOTEON,warp,0/0.4,1,1,38 random", true); //batt
+//        app->addCommand("NOTEON,user3,0/1,0.5,1,44 transcient", true); //batt
     
 
     
@@ -75,7 +74,7 @@ public:
     void draw(){
         ofEnableBlendMode(OF_BLENDMODE_ALPHA);
         ofSetColor(0,0,0);
-        ofRect(0,0,WIDTH,HEIGHT);
+        ofRectangle(0,0,WIDTH,HEIGHT);
         
         ofTranslate(WIDTH/2, HEIGHT/2);
         
@@ -156,7 +155,7 @@ public:
     }
     
     void loadMesh(){
-        _max = 0;
+        /*_max = 0;
 
         string t = ofBufferFromFile("/Users/Raph/Desktop/3D Models/cocoTree/coconut.obj").getText();
         vector<string > v1,v2,v3;
@@ -217,7 +216,7 @@ public:
                     continue;
                 }
             }
-        }
+        }*/
     }
     
     void mask(){}
@@ -292,7 +291,7 @@ public:
      void oscEvent(std::string header, std::vector<float> args){}
     
      void saveMacro(stringstream *xml){}
-     void loadMacro(ofXml *xml){}
+     void loadMacro(TiXmlHandle *xml){}
     void exit(){ }
 
     std::string getInfo(){

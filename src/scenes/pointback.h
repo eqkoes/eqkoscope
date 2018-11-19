@@ -305,29 +305,8 @@ public:
         (*xml) << "</pointback>" << endl;
     }
     
-    void loadMacro(ofXml *xml){
+    void loadMacro(TiXmlHandle *xml){
 
-        upRot = xml->getFloatValue("upRot");
-        scale = xml->getFloatValue("scale");
-        dScale = xml->getFloatValue("dScale");
-        doffx = xml->getFloatValue("doffx");
-        doffy = xml->getFloatValue("doffy");
-        pace = xml->getFloatValue("pace");
-        offx = xml->getFloatValue("offx");
-        offy = xml->getFloatValue("offy");
-        rot = xml->getFloatValue("rot");
-        inverted = xml->getFloatValue("inverted")==1;
-        erode = xml->getFloatValue("erode")==1;
-        randomPhi = xml->getFloatValue("randomPhi")==1;
-        render = xml->getFloatValue("render");
-        pause = xml->getFloatValue("pause")==1;
-        offset = xml->getFloatValue("offset");
-        MAX_LAYERS = xml->getFloatValue("MAX_LAYERS");
-        MAX_PTS = xml->getFloatValue("MAX_PTS");
-        NB_PTS_ADD = xml->getFloatValue("NB_PTS_ADD");
-        T = xml->getFloatValue("T");
-        t = xml->getFloatValue("t");
-        centerEase = xml->getFloatValue("centerEase");
             }
     
     ofImage img;

@@ -204,14 +204,8 @@ public:
     }
     
     
-    void loadMacro(ofXml *xml){
+    void loadMacro(TiXmlHandle *xml){
 
-        xml->getFloatValue("sampleRate");
-        xml->getFloatValue("sample");
-        maxPts = xml->getFloatValue("maxPts");
-        renderMode = xml->getFloatValue("renderMode");
-        z = xml->getFloatValue("z");
-        zSpeed = xml->getFloatValue("zSpeed");
  }
     
     std::string getInfo(){

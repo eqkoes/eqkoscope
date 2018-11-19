@@ -83,7 +83,7 @@ public:
          
          (*xml) << "</agents>" << endl;
      }
-     void loadMacro(ofXml *xml){}
+     void loadMacro(TiXmlHandle *xml){}
     
      std::string getInfo(){return "";}
     

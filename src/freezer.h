@@ -36,7 +36,7 @@ public:
         ofFbo* img = new ofFbo();
         img->begin();
         ofSetColor(0);
-        ofRect(0,0,w,h);
+        ofDrawRectangle(0,0,w,h);
         img->end();
         img->allocate(w, h);
         imgs.push_back(img);
@@ -59,7 +59,7 @@ public:
         }
         img->begin();
         ofSetColor(c);
-        ofRect(0,0,w,h);
+        ofDrawRectangle(0,0,w,h);
         img->end();
         imgs.push_back(img);
         coords.push_back(new ofVec2f(x, y));
